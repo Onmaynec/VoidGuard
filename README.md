@@ -9,7 +9,7 @@ PowerShell 5.1+ · Windows 10/11 · defensive security toolkit
 [![Release](https://img.shields.io/github/v/release/Onmaynec/VoidGuard?display_name=tag)](https://github.com/Onmaynec/VoidGuard/releases)
 [![License](https://img.shields.io/badge/license-MIT-00ff77)](LICENSE)
 
-`[ SCAN ]  [ ANALYZE ]  [ CONTAIN ]  [ VERIFY ]`
+`[ SCAN ]  [ CORRELATE ]  [ CONTAIN ]  [ VERIFY ]  [ REPORT ]`
 
 </div>
 
@@ -17,26 +17,27 @@ PowerShell 5.1+ · Windows 10/11 · defensive security toolkit
 
 **VoidGuard** — консольная Windows-утилита для проверки подозрительных файлов, процессов, механизмов закрепления и состояния встроенной защиты.
 
-Декорация отделена от реальных результатов: фейковые эффекты всегда помечаются `[VISUAL]` и никогда не участвуют в решении об угрозе.
+Декоративные эффекты всегда помечаются `[VISUAL]` и не участвуют в решении об угрозе. Реальный скоринг строится из проверяемых признаков: пути, подписи, SHA-256, PE-метаданных, энтропии, persistence, rule packs и опционального YARA.
 
-## Возможности v0.2.0 — LOCKDOWN PROTOCOL
+## Возможности v0.3.0 — SIGNATURE GRID
 
-- полноэкранное TUI-меню с управлением стрелками;
+- полноэкранное TUI-меню с управлением стрелками и cinematic-эффектами;
 - Quick Scan и сканирование выбранного файла/каталога;
 - SHA-256, Authenticode, двойные расширения и скриптовые эвристики;
-- анализ процессов: путь, подпись, командная строка, parent PID и TCP-соединения;
-- `PERSISTENCE MATRIX`: Run/RunOnce, Startup folders, Services, Scheduled Tasks и permanent WMI subscriptions;
-- расширенный security status: Defender, exclusions, Firewall, UAC, SmartScreen, proxy и hosts;
-- Windows Restart Manager для определения реальных владельцев блокировки файла;
-- безопасная остановка только процесса, чей executable path точно совпадает с проверенной целью;
-- защищённый карантин с SHA-256 и восстановлением;
-- удаление занятого файла при следующей загрузке через `MoveFileEx`;
-- журнал pending remediation и проверка результата после перезагрузки;
-- JSON-режимы для автоматизации.
+- PE parser: архитектура, секции, compile timestamp и несоответствие расширения содержимому;
+- entropy sampling для обнаружения упакованного или зашифрованного содержимого;
+- доверенные rule packs с schema validation и SHA-256 каждого файла;
+- RSA-SHA256 verification для внешних packs из локального trust store;
+- встроенный defensive core pack с LOLBin/persistence patterns;
+- опциональная интеграция с установленным пользователем `yara.exe` / `yara64.exe`;
+- офлайн HTML и JSON reports без JavaScript, аналитики и внешних ресурсов;
+- Process Analyzer, `PERSISTENCE MATRIX` и расширенный Windows security status;
+- Windows Restart Manager, защищённый карантин и delete-on-reboot ledger;
+- JSON CLI для автоматизации.
 
 ## Установка
 
-Скачайте `VoidGuard-v0.2.0-Portable.zip` из **Releases**, распакуйте и запустите:
+Скачайте `VoidGuard-v0.3.0-Portable.zip` из **Releases**, распакуйте и запустите:
 
 ```cmd
 VoidGuard.cmd
@@ -48,61 +49,72 @@ VoidGuard.cmd
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\VoidGuard.ps1
 ```
 
-Для просмотра достаточно обычных прав. Остановка процесса и удаление при загрузке требуют запуска CMD/PowerShell от администратора.
+YARA не входит в архив и не скачивается автоматически. Без него VoidGuard продолжает использовать встроенные правила, PE-анализ и эвристику.
 
-## Безопасность remediation
+## Rule-pack trust model
 
-VoidGuard не предоставляет `--force-delete-anything` и не принимает произвольную команду «убить PID».
+Pack активируется только после проверки:
 
-Операция блокируется для:
+1. `manifest.json` и поддерживаемой schema;
+2. отсутствия absolute path / `..` / выхода из каталога pack;
+3. SHA-256 каждого перечисленного файла;
+4. режима доверия:
+   - `bundled` — pack поставлен внутри проверенного релиза VoidGuard;
+   - `signed` — RSA-SHA256 подпись проверена ключом из `Rules/trusted-publishers.json`;
+   - `local` — запрещён по умолчанию и требует явной настройки.
 
-- Windows и Program Files;
-- Windows Resource Protection;
-- файлов с действительной подписью Microsoft;
-- TrustedInstaller-owned объектов;
-- корней томов, каталогов и reparse points;
-- критических процессов Windows;
-- процесса, executable path которого не совпадает с выбранным файлом.
-
-Для DLL или файла, удерживаемого сторонним процессом, VoidGuard не завершает владельца автоматически. Безопасный путь — назначить удаление на следующую загрузку и затем проверить ledger.
+Невалидный pack показывается в inventory, но не участвует в сканировании.
 
 ## CLI
 
 ```powershell
-# Сканирование
+# Сканирование с автоматическим rule engine
 .\VoidGuard.ps1 -Mode QuickScan -Professional
 .\VoidGuard.ps1 -Mode CustomScan -Path "C:\Downloads" -Json
 
-# Состояние и анализ
+# Сканирование + офлайн HTML/JSON reports
+.\VoidGuard.ps1 -Mode CustomScan -Path "C:\Downloads" `
+  -ReportPath ".\Reports\downloads-scan" -ReportFormat Both
+
+# Состояние packs и YARA
+.\VoidGuard.ps1 -Mode RulePacks -Json
+.\VoidGuard.ps1 -Mode Yara -Path "C:\Suspicious\payload.exe" -Json
+
+# Состояние системы, процессы и persistence
 .\VoidGuard.ps1 -Mode Status -Json
 .\VoidGuard.ps1 -Mode Processes -Json
 .\VoidGuard.ps1 -Mode Persistence -Json
 .\VoidGuard.ps1 -Mode Locks -Path "C:\Suspicious\payload.exe" -Json
 
-# Подтверждённая остановка точного процесса + карантин
+# Безопасная remediation
 .\VoidGuard.ps1 -Mode Remediate -Path "C:\Suspicious\payload.exe" `
   -StopTargetProcess -TargetProcessId 4242 -Confirmed -Json
-
-# Если файл остаётся заблокирован — удалить при следующей загрузке
 .\VoidGuard.ps1 -Mode Remediate -Path "C:\Suspicious\payload.exe" `
   -ScheduleOnReboot -Confirmed -Json
-
-# После перезагрузки проверить результат
 .\VoidGuard.ps1 -Mode Pending -Json
 ```
 
-Подробности: [docs/USAGE.md](docs/USAGE.md), [docs/REMEDIATION.md](docs/REMEDIATION.md) и [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Подробности:
+
+- [Использование](docs/USAGE.md)
+- [Rule packs и YARA](docs/RULE_PACKS.md)
+- [Reports](docs/REPORTS.md)
+- [Safe remediation](docs/REMEDIATION.md)
+- [Архитектура](docs/ARCHITECTURE.md)
+
+## Безопасность remediation
+
+VoidGuard не предоставляет `--force-delete-anything` и не принимает произвольную команду «убить PID». Windows/Program Files, WRP, Microsoft-signed, TrustedInstaller, root, directory, reparse-point и критические процессные цели блокируются backend-политикой непосредственно перед действием.
 
 ## Важное предупреждение
 
-VoidGuard — дополнительный диагностический инструмент, а не замена Microsoft Defender или коммерческому EDR. Эвристические результаты могут содержать ложные срабатывания. Проверяйте путь, подпись, хеш и причины оценки перед remediation.
+VoidGuard — дополнительный диагностический инструмент, а не замена Microsoft Defender или коммерческому EDR. Эвристические, pattern и YARA результаты могут содержать ложные срабатывания. Проверяйте путь, подпись, хеш и все причины оценки перед remediation.
 
 ## Roadmap
 
-- **v0.3** — HTML/JSON reports, экспорт incident bundle и улучшенный PE-анализ;
-- **v0.4** — YARA и подписываемые rule packs;
-- **v0.5** — интеграция Microsoft Defender Offline;
-- **v1.0** — стабильный CLI contract и подписанные релизы.
+- **v0.4** — Defender Offline orchestration и baseline/diff состояния системы;
+- **v0.5** — безопасное обновление rule packs и incident bundle;
+- **v1.0** — стабильный CLI contract и подписанные приложения/релизы.
 
 ## Лицензия
 

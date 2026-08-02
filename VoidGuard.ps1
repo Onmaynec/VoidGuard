@@ -3,13 +3,13 @@
 .SYNOPSIS
     VoidGuard - cinematic Windows threat inspection and safe remediation console.
 .DESCRIPTION
-    A defensive PowerShell utility for inspecting risky files, processes,
-    persistence mechanisms, Windows security status, and locked-file remediation.
-    Destructive operations are conservative, auditable, and protected by policy.
+    Defensive PowerShell utility for inspecting risky files, processes,
+    persistence, Windows security state, trusted rule packs, optional YARA,
+    offline reports, and locked-file remediation.
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('Interactive', 'QuickScan', 'CustomScan', 'Status', 'Processes', 'Persistence', 'Locks', 'Remediate', 'Pending', 'Demo')]
+    [ValidateSet('Interactive', 'QuickScan', 'CustomScan', 'Status', 'Processes', 'Persistence', 'Locks', 'Remediate', 'Pending', 'RulePacks', 'Yara', 'Demo')]
     [string]$Mode = 'Interactive',
 
     [string]$Path,
@@ -21,6 +21,11 @@ param(
     [switch]$ScheduleOnReboot,
 
     [switch]$Confirmed,
+
+    [string]$ReportPath,
+
+    [ValidateSet('Json', 'Html', 'Both')]
+    [string]$ReportFormat = 'Both',
 
     [switch]$NoAnimation,
 
@@ -44,11 +49,13 @@ try {
 $moduleOrder = @(
     'VoidGuard.Animation.psm1',
     'VoidGuard.Protection.psm1',
+    'VoidGuard.RulePacks.psm1',
     'VoidGuard.Scanner.psm1',
     'VoidGuard.System.psm1',
     'VoidGuard.Persistence.psm1',
     'VoidGuard.Remediation.psm1',
     'VoidGuard.Quarantine.psm1',
+    'VoidGuard.Reporting.psm1',
     'VoidGuard.UI.psm1'
 )
 
@@ -66,7 +73,13 @@ $context = New-VoidGuardContext -RootPath $script:VoidGuardRoot -Settings $setti
 
 function Write-ResultOutput {
     param([Parameter(Mandatory)]$Value)
-    if ($Json) { $Value | ConvertTo-Json -Depth 10 } else { $Value }
+
+    if (-not [string]::IsNullOrWhiteSpace($ReportPath)) {
+        $reportFiles = @(Export-VoidGuardReportBundle -InputObject $Value -Context $context -OutputPath $ReportPath -Format $ReportFormat)
+        foreach ($reportFile in $reportFiles) { Write-Host "[OK] Report: $reportFile" -ForegroundColor Green }
+    }
+
+    if ($Json) { $Value | ConvertTo-Json -Depth 14 } else { $Value }
 }
 
 try {
@@ -75,9 +88,7 @@ try {
             if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) {
                 throw 'Interactive mode requires a real console. Use a non-interactive -Mode value.'
             }
-            if (-not $Professional -and -not $NoAnimation) {
-                Show-VoidGuardBootSequence -RootPath $script:VoidGuardRoot
-            }
+            if (-not $Professional -and -not $NoAnimation) { Show-VoidGuardBootSequence -RootPath $script:VoidGuardRoot }
             Start-VoidGuardConsole -Context $context
         }
         'QuickScan' {
@@ -103,10 +114,10 @@ try {
         'Remediate' {
             if ([string]::IsNullOrWhiteSpace($Path)) { throw 'Remediate requires -Path.' }
             $result = [ordered]@{
-                Path            = $Path
-                ProcessAction   = $null
-                Quarantine      = $null
-                RebootDeletion  = $null
+                Path = $Path
+                ProcessAction = $null
+                Quarantine = $null
+                RebootDeletion = $null
             }
             if ($StopTargetProcess) {
                 if ($TargetProcessId -le 0) { throw '-StopTargetProcess requires -TargetProcessId.' }
@@ -120,6 +131,14 @@ try {
         }
         'Pending' {
             Write-ResultOutput (Get-VoidGuardPendingRemediations -Verify)
+        }
+        'RulePacks' {
+            Write-ResultOutput (Get-VoidGuardRulePackInventory -Context $context)
+        }
+        'Yara' {
+            if ([string]::IsNullOrWhiteSpace($Path)) { throw 'Yara requires -Path.' }
+            $engine = Get-VoidGuardRuleEngineState -Context $context
+            Write-ResultOutput (Invoke-VoidGuardYaraScan -Path $Path -Context $context -RuleFiles $engine.YaraRuleFiles)
         }
         'Demo' {
             Show-VoidGuardVisualDemo -RootPath $script:VoidGuardRoot

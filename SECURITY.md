@@ -4,9 +4,9 @@
 
 VoidGuard — защитная диагностическая утилита. Она не должна использоваться как универсальный механизм удаления файлов, завершения процессов или обхода Windows security boundaries.
 
-## Защитные ограничения
+## Защитные ограничения remediation
 
-VoidGuard v0.2.0 блокирует quarantine/remediation для:
+VoidGuard v0.3.0 блокирует quarantine/remediation для:
 
 - Windows и Program Files;
 - Windows Resource Protection файлов;
@@ -17,6 +17,27 @@ VoidGuard v0.2.0 блокирует quarantine/remediation для:
 - процессов, executable path которых не совпадает с canonical path цели.
 
 Заблокированную policy нельзя обойти параметром `--force`: такого параметра в проекте нет.
+
+## Rule-pack security
+
+До загрузки pack проверяются schema, относительные пути и SHA-256 каждого файла. Файл правила не может быть absolute path, содержать `..` или выходить из каталога pack.
+
+- `signed` packs требуют RSA-SHA256 signature и ключ из локального trust store;
+- `local` packs запрещены по умолчанию;
+- невалидные packs остаются видимыми в inventory, но не используются scanner;
+- rules влияют только на evidence/score и не вызывают quarantine/remediation;
+- VoidGuard не загружает YARA binary или packs из сети автоматически.
+
+`bundled` означает, что pack поставляется внутри release archive. Проверяйте SHA256SUMS release перед первым запуском.
+
+## Report security
+
+HTML reports:
+
+- HTML-экранируют значения находок;
+- не содержат JavaScript;
+- не используют внешние CSS, fonts, images, analytics или network requests;
+- не должны открываться как доверенная инструкция по remediation без проверки исходного объекта.
 
 ## Привилегированные операции
 
@@ -32,8 +53,10 @@ VoidGuard v0.2.0 блокирует quarantine/remediation для:
 - удалить Windows/Microsoft/WRP/TrustedInstaller файл;
 - завершить произвольный или критический процесс;
 - подменить проверенный путь через symlink/reparse point или race condition;
-- выйти из quarantine directory;
-- выполнить произвольную команду через persistence parser;
+- выйти из quarantine или rule-pack directory;
+- загрузить pack с неверным SHA-256 или недействительной RSA-подписью;
+- выполнить произвольную команду через rule/persistence parser;
+- внедрить active content в HTML report;
 - изменить release assets после публикации без обнаружения.
 
 ## Сообщение об уязвимости

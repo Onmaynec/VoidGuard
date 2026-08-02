@@ -1,11 +1,17 @@
 {
   "theme": "MatrixGreen",
-  "animationDelayScale": 0.65,
-  "maxFilesPerScan": 3500,
+  "animationDelayScale": 0.6,
+  "maxFilesPerScan": 4000,
   "minimumFindingScore": 20,
   "minimumPersistenceScore": 18,
   "maximumDisplayedFindings": 30,
   "verifyPendingOnStartup": true,
+  "enabledRulePacks": ["voidguard.core"],
+  "allowUnsignedLocalRulePacks": false,
+  "yaraExecutable": "",
+  "yaraTimeoutSeconds": 15,
+  "yaraMaxFileSizeBytes": 67108864,
+  "entropySampleBytes": 1048576,
   "showVisualLabels": true,
   "language": "ru-RU"
 }
