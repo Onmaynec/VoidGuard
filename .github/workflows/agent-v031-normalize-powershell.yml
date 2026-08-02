@@ -1,0 +1,46 @@
+name: Normalize PowerShell UTF-8 BOM
+
+on:
+  push:
+    branches:
+      - agent/voidguard-v0.3.1-encoding-fix
+    paths:
+      - .github/workflows/agent-v031-normalize-powershell.yml
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v5
+        with:
+          ref: agent/voidguard-v0.3.1-encoding-fix
+          fetch-depth: 0
+
+      - name: Add UTF-8 BOM to tracked PowerShell files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $utf8Bom = [System.Text.UTF8Encoding]::new($true)
+          $utf8Reader = [System.Text.UTF8Encoding]::new($false, $true)
+          $files = @(git ls-files | Where-Object { $_ -match '\.(ps1|psm1|psd1)$' })
+          if ($files.Count -eq 0) { throw 'No tracked PowerShell files found.' }
+
+          foreach ($relativePath in $files) {
+            $fullPath = Join-Path $PWD $relativePath
+            $text = [IO.File]::ReadAllText($fullPath, $utf8Reader)
+            [IO.File]::WriteAllText($fullPath, $text, $utf8Bom)
+          }
+
+          Remove-Item -LiteralPath '.github/workflows/agent-v031-normalize-powershell.yml' -Force
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) { throw 'Encoding normalization produced no changes.' }
+          git commit -m 'fix: store PowerShell source as UTF-8 BOM'
+          git push origin HEAD:agent/voidguard-v0.3.1-encoding-fix
