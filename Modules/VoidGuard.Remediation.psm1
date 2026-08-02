@@ -77,9 +77,7 @@ public static class VoidGuardRemediationNative
     } catch {
         if ($_.Exception.Message -match 'already exists') {
             $script:RemediationNativeLoaded = $true
-        } else {
-            throw
-        }
+        } else { throw }
     }
 }
 
@@ -94,7 +92,6 @@ function Get-VoidGuardPendingRoot {
     } else {
         Join-Path $env:TEMP 'VoidGuard\Pending'
     }
-
     if (-not (Test-Path -LiteralPath $root)) {
         New-Item -ItemType Directory -Path $root -Force | Out-Null
     }
@@ -109,37 +106,40 @@ function Get-VoidGuardFileLockOwners {
     $canonical = Get-VoidGuardCanonicalPath -Path $Path
     Initialize-VoidGuardRemediationNative
 
-    $session = 0
-    $key = New-Object Text.StringBuilder 33
+    [uint32]$session = 0
+    $key = [Text.StringBuilder]::new(33)
     $start = [VoidGuardRemediationNative]::RmStartSession([ref]$session, 0, $key)
     if ($start -ne 0) { return @(Get-VoidGuardLockingProcesses -Path $canonical) }
 
     try {
-        $registered = [VoidGuardRemediationNative]::RmRegisterResources($session, 1, @($canonical), 0, [IntPtr]::Zero, 0, $null)
+        [string[]]$files = @($canonical)
+        $registered = [VoidGuardRemediationNative]::RmRegisterResources($session, 1, $files, 0, [IntPtr]::Zero, 0, $null)
         if ($registered -ne 0) { return @(Get-VoidGuardLockingProcesses -Path $canonical) }
 
         [uint32]$needed = 0
         [uint32]$count = 0
         [uint32]$rebootReasons = 0
         $result = [VoidGuardRemediationNative]::RmGetList($session, [ref]$needed, [ref]$count, $null, [ref]$rebootReasons)
-        if ($result -ne [VoidGuardRemediationNative]::ERROR_MORE_DATA -or $needed -eq 0) { return @() }
+        if ($result -eq 0 -and $needed -eq 0) { return @() }
+        if ($result -ne [VoidGuardRemediationNative]::ERROR_MORE_DATA -or $needed -eq 0) {
+            return @(Get-VoidGuardLockingProcesses -Path $canonical)
+        }
 
-        $items = New-Object 'VoidGuardRemediationNative+RM_PROCESS_INFO[]' $needed
+        $items = [VoidGuardRemediationNative+RM_PROCESS_INFO[]]::new([int]$needed)
         $count = $needed
         $result = [VoidGuardRemediationNative]::RmGetList($session, [ref]$needed, [ref]$count, $items, [ref]$rebootReasons)
-        if ($result -ne 0) { return @() }
+        if ($result -ne 0) { return @(Get-VoidGuardLockingProcesses -Path $canonical) }
 
         $owners = New-Object System.Collections.Generic.List[object]
-        for ($i = 0; $i -lt $count; $i++) {
-            $entry = $items[$i]
+        for ($index = 0; $index -lt $count; $index++) {
+            $entry = $items[$index]
             $processPath = $null
             $processName = $entry.strAppName
             try {
                 $process = Get-Process -Id $entry.Process.dwProcessId -ErrorAction Stop
                 $processName = $process.ProcessName
                 $processPath = $process.Path
-            } catch {
-            }
+            } catch { }
             $owners.Add([pscustomobject]@{
                 Id          = [int]$entry.Process.dwProcessId
                 Name        = [string]$processName
@@ -147,6 +147,7 @@ function Get-VoidGuardFileLockOwners {
                 ServiceName = [string]$entry.strServiceShortName
                 Type        = [string]$entry.ApplicationType
                 Restartable = [bool]$entry.bRestartable
+                RebootReason = [uint32]$rebootReasons
             })
         }
         return @($owners | Sort-Object Id -Unique)
@@ -205,7 +206,10 @@ function Stop-VoidGuardTargetProcess {
     if ($PSCmdlet.ShouldProcess("PID $Id", 'Stop exact target process')) {
         try {
             Stop-Process -Id $Id -Force -ErrorAction Stop
-            Start-Sleep -Milliseconds 250
+            Start-Sleep -Milliseconds 350
+            if (Get-Process -Id $Id -ErrorAction SilentlyContinue) {
+                return [pscustomobject]@{ Success = $false; Status = 'PROCESS_STILL_RUNNING'; Id = $Id }
+            }
             return [pscustomobject]@{ Success = $true; Status = 'PROCESS_STOPPED'; Id = $Id }
         } catch {
             return [pscustomobject]@{ Success = $false; Status = 'PROCESS_STOP_FAILED'; Id = $Id; Reason = $_.Exception.Message }
@@ -246,9 +250,12 @@ function Register-VoidGuardDeleteOnReboot {
     }
 
     $record = [ordered]@{
+        SchemaVersion  = 1
         Id             = $id
         Path           = $canonical
         SHA256         = $hash
+        CurrentSHA256  = $null
+        HashMatches    = $null
         ScheduledUtc   = (Get-Date).ToUniversalTime()
         Status         = 'PENDING_REBOOT'
         VerifiedUtc    = $null
@@ -270,13 +277,28 @@ function Get-VoidGuardPendingRemediations {
             $record = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
             if ($Verify) {
                 $exists = Test-Path -LiteralPath ([string]$record.Path)
-                $record.Status = if ($exists) { 'STILL_PRESENT' } else { 'REMOVED_VERIFIED' }
+                $currentHash = $null
+                $hashMatches = $null
+                if ($exists) {
+                    try {
+                        $currentHash = (Get-FileHash -LiteralPath ([string]$record.Path) -Algorithm SHA256 -ErrorAction Stop).Hash
+                        $hashMatches = [string]::Equals([string]$record.SHA256, $currentHash, [StringComparison]::OrdinalIgnoreCase)
+                    } catch { }
+                }
+                $record.Status = if (-not $exists) {
+                    'REMOVED_VERIFIED'
+                } elseif ($hashMatches -eq $false) {
+                    'REPLACED_OR_RECREATED'
+                } else {
+                    'STILL_PRESENT'
+                }
+                $record.CurrentSHA256 = $currentHash
+                $record.HashMatches = $hashMatches
                 $record.VerifiedUtc = (Get-Date).ToUniversalTime()
                 $record | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $file.FullName -Encoding UTF8
             }
             $records.Add($record)
-        } catch {
-        }
+        } catch { }
     }
     return @($records | Sort-Object ScheduledUtc -Descending)
 }
