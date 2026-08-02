@@ -1,15 +1,25 @@
 Set-StrictMode -Version Latest
 
+function Get-VoidGuardPropertyValue {
+    param(
+        $InputObject,
+        [Parameter(Mandatory)][string]$Name,
+        $DefaultValue = $null
+    )
+
+    if ($null -eq $InputObject) { return $DefaultValue }
+    $property = $InputObject.PSObject.Properties[$Name]
+    if ($property) { return $property.Value }
+    return $DefaultValue
+}
+
 function Get-VoidGuardRuleSetting {
     param(
         [Parameter(Mandatory)]$Settings,
         [Parameter(Mandatory)][string]$Name,
         $DefaultValue
     )
-
-    $property = $Settings.PSObject.Properties[$Name]
-    if ($property) { return $property.Value }
-    return $DefaultValue
+    return Get-VoidGuardPropertyValue -InputObject $Settings -Name $Name -DefaultValue $DefaultValue
 }
 
 function Get-VoidGuardTrustedPublishers {
@@ -18,13 +28,15 @@ function Get-VoidGuardTrustedPublishers {
 
     $path = Join-Path $RootPath 'Rules\trusted-publishers.json'
     $table = @{}
-    if (-not (Test-Path -LiteralPath $path)) { return $table }
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $table }
 
     try {
         $entries = Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json
         foreach ($entry in @($entries)) {
-            if ($entry.keyId -and $entry.rsaXml) {
-                $table[[string]$entry.keyId] = $entry
+            $keyId = [string](Get-VoidGuardPropertyValue $entry 'keyId' '')
+            $rsaXml = [string](Get-VoidGuardPropertyValue $entry 'rsaXml' '')
+            if (-not [string]::IsNullOrWhiteSpace($keyId) -and -not [string]::IsNullOrWhiteSpace($rsaXml)) {
+                $table[$keyId] = $entry
             }
         }
     } catch {
@@ -36,19 +48,41 @@ function ConvertTo-VoidGuardRulePackPayload {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Manifest)
 
-    $lines = New-Object System.Collections.Generic.List[string]
-    $lines.Add("schemaVersion=$([int]$Manifest.schemaVersion)")
-    $lines.Add("id=$([string]$Manifest.id)")
-    $lines.Add("name=$([string]$Manifest.name)")
-    $lines.Add("version=$([string]$Manifest.version)")
-    $lines.Add("publisher=$([string]$Manifest.publisher)")
-    $lines.Add("trustMode=$([string]$Manifest.trustMode)")
-    $lines.Add("minimumVoidGuardVersion=$([string]$Manifest.minimumVoidGuardVersion)")
+    $lines = @(
+        "schemaVersion=$([int](Get-VoidGuardPropertyValue $Manifest 'schemaVersion' 0))",
+        "id=$([string](Get-VoidGuardPropertyValue $Manifest 'id' ''))",
+        "name=$([string](Get-VoidGuardPropertyValue $Manifest 'name' ''))",
+        "version=$([string](Get-VoidGuardPropertyValue $Manifest 'version' ''))",
+        "publisher=$([string](Get-VoidGuardPropertyValue $Manifest 'publisher' ''))",
+        "trustMode=$([string](Get-VoidGuardPropertyValue $Manifest 'trustMode' ''))",
+        "minimumVoidGuardVersion=$([string](Get-VoidGuardPropertyValue $Manifest 'minimumVoidGuardVersion' ''))"
+    )
 
-    foreach ($file in @($Manifest.files | Sort-Object path)) {
-        $lines.Add("file=$([string]$file.path)|$([string]$file.sha256)|$([string]$file.type)")
+    $manifestFiles = @(Get-VoidGuardPropertyValue $Manifest 'files' @())
+    foreach ($file in @($manifestFiles | Sort-Object { [string](Get-VoidGuardPropertyValue $_ 'path' '') })) {
+        $path = [string](Get-VoidGuardPropertyValue $file 'path' '')
+        $hash = [string](Get-VoidGuardPropertyValue $file 'sha256' '')
+        $type = [string](Get-VoidGuardPropertyValue $file 'type' '')
+        $lines += "file=$path|$hash|$type"
     }
     return ($lines -join "`n")
+}
+
+function Import-VoidGuardRsaPublicKey {
+    param(
+        [Parameter(Mandatory)][Security.Cryptography.RSA]$Rsa,
+        [Parameter(Mandatory)][string]$RsaXml
+    )
+
+    [xml]$document = $RsaXml
+    $root = $document.RSAKeyValue
+    if (-not $root -or -not $root.Modulus -or -not $root.Exponent) {
+        throw 'Trusted RSA key XML is invalid.'
+    }
+    $parameters = New-Object Security.Cryptography.RSAParameters
+    $parameters.Modulus = [Convert]::FromBase64String([string]$root.Modulus)
+    $parameters.Exponent = [Convert]::FromBase64String([string]$root.Exponent)
+    $Rsa.ImportParameters($parameters)
 }
 
 function Test-VoidGuardRulePack {
@@ -58,138 +92,175 @@ function Test-VoidGuardRulePack {
         [Parameter(Mandatory)]$Context
     )
 
-    $errors = New-Object System.Collections.Generic.List[string]
-    $warnings = New-Object System.Collections.Generic.List[string]
-    $verifiedFiles = New-Object System.Collections.Generic.List[object]
+    $errors = @()
+    $warnings = @()
+    $verifiedFiles = @()
     $manifest = $null
     $canonicalPack = $null
 
     try {
-        $canonicalPack = (Get-Item -LiteralPath $PackPath -Force -ErrorAction Stop).FullName
+        $packItem = Get-Item -LiteralPath $PackPath -Force -ErrorAction Stop
+        if (-not $packItem.PSIsContainer) { throw 'Rule-pack path is not a directory.' }
+        $canonicalPack = $packItem.FullName
         $manifestPath = Join-Path $canonicalPack 'manifest.json'
         $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
     } catch {
-        $errors.Add("Manifest cannot be loaded: $($_.Exception.Message)")
+        $errors += "Manifest cannot be loaded: $($_.Exception.Message)"
     }
 
-    if ($manifest) {
-        if ([int]$manifest.schemaVersion -ne 1) { $errors.Add('Unsupported rule-pack schema version.') }
-        if ([string]$manifest.id -notmatch '^[a-z0-9][a-z0-9._-]{2,79}$') { $errors.Add('Invalid rule-pack id.') }
-        try { $null = [version]([string]$manifest.version) } catch { $errors.Add('Invalid rule-pack version.') }
+    $packId = if ($manifest) { [string](Get-VoidGuardPropertyValue $manifest 'id' '') } else { Split-Path -Leaf $PackPath }
+    $packName = if ($manifest) { [string](Get-VoidGuardPropertyValue $manifest 'name' '') } else { $null }
+    $packVersion = if ($manifest) { [string](Get-VoidGuardPropertyValue $manifest 'version' '') } else { $null }
+    $publisher = if ($manifest) { [string](Get-VoidGuardPropertyValue $manifest 'publisher' '') } else { $null }
+    $trustMode = if ($manifest) { [string](Get-VoidGuardPropertyValue $manifest 'trustMode' '') } else { '' }
 
-        $trustMode = [string]$manifest.trustMode
-        if ($trustMode -notin @('bundled', 'signed', 'local')) { $errors.Add('Invalid trustMode.') }
+    if ($manifest) {
+        if ([int](Get-VoidGuardPropertyValue $manifest 'schemaVersion' 0) -ne 1) { $errors += 'Unsupported rule-pack schema version.' }
+        if ($packId -notmatch '^[a-z0-9][a-z0-9._-]{2,79}$') { $errors += 'Invalid rule-pack id.' }
+        try { $null = [version]$packVersion } catch { $errors += 'Invalid rule-pack version.' }
+        if ($trustMode -notin @('bundled', 'signed', 'local')) { $errors += 'Invalid trustMode.' }
+
+        $minimum = [string](Get-VoidGuardPropertyValue $manifest 'minimumVoidGuardVersion' '0.0.0')
+        try {
+            if ([version]$Context.Version -lt [version]$minimum) {
+                $errors += "Rule pack requires VoidGuard $minimum or newer."
+            }
+        } catch {
+            $errors += 'Invalid minimumVoidGuardVersion.'
+        }
 
         $packRoot = [IO.Path]::GetFullPath($canonicalPack).TrimEnd('\') + '\'
-        foreach ($entry in @($manifest.files)) {
-            $relative = [string]$entry.path
+        $manifestFiles = @(Get-VoidGuardPropertyValue $manifest 'files' @())
+        if ($manifestFiles.Count -eq 0) { $errors += 'Rule pack contains no files.' }
+
+        foreach ($entry in $manifestFiles) {
+            $relative = [string](Get-VoidGuardPropertyValue $entry 'path' '')
+            $expectedHash = ([string](Get-VoidGuardPropertyValue $entry 'sha256' '')).ToUpperInvariant()
+            $fileType = [string](Get-VoidGuardPropertyValue $entry 'type' '')
+
             if ([string]::IsNullOrWhiteSpace($relative) -or [IO.Path]::IsPathRooted($relative) -or $relative -match '(^|[\\/])\.\.([\\/]|$)') {
-                $errors.Add("Unsafe rule-pack file path: $relative")
+                $errors += "Unsafe rule-pack file path: $relative"
+                continue
+            }
+            if ($expectedHash -notmatch '^[A-F0-9]{64}$') {
+                $errors += "Invalid SHA-256 in manifest: $relative"
+                continue
+            }
+            if ($fileType -notin @('pattern', 'yara')) {
+                $errors += "Unsupported rule-pack file role: $relative"
                 continue
             }
 
             try {
                 $fullPath = [IO.Path]::GetFullPath((Join-Path $canonicalPack $relative))
                 if (-not $fullPath.StartsWith($packRoot, [StringComparison]::OrdinalIgnoreCase)) {
-                    $errors.Add("Rule-pack file escapes pack root: $relative")
+                    $errors += "Rule-pack file escapes pack root: $relative"
                     continue
                 }
                 if ([IO.Path]::GetExtension($fullPath).ToLowerInvariant() -notin @('.json', '.yar', '.yara')) {
-                    $errors.Add("Unsupported rule-pack file type: $relative")
+                    $errors += "Unsupported rule-pack file extension: $relative"
                     continue
                 }
                 if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
-                    $errors.Add("Rule-pack file is missing: $relative")
+                    $errors += "Rule-pack file is missing: $relative"
                     continue
                 }
 
                 $actualHash = (Get-FileHash -LiteralPath $fullPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToUpperInvariant()
-                $expectedHash = ([string]$entry.sha256).ToUpperInvariant()
                 if ($actualHash -ne $expectedHash) {
-                    $errors.Add("SHA-256 mismatch: $relative")
+                    $errors += "SHA-256 mismatch: $relative"
                     continue
                 }
-                $verifiedFiles.Add([pscustomobject]@{
+                $verifiedFiles += [pscustomobject]@{
                     Path = $fullPath
                     RelativePath = $relative
-                    Type = [string]$entry.type
+                    Type = $fileType
                     SHA256 = $actualHash
-                })
+                }
             } catch {
-                $errors.Add("Rule-pack file validation failed for ${relative}: $($_.Exception.Message)")
+                $errors += "Rule-pack file validation failed for ${relative}: $($_.Exception.Message)"
             }
         }
     }
 
-    $signatureValid = $false
+    $trusted = $false
     $trustReason = 'Untrusted'
     if ($manifest -and $errors.Count -eq 0) {
-        switch ([string]$manifest.trustMode) {
+        switch ($trustMode) {
             'bundled' {
                 $expectedRoot = [IO.Path]::GetFullPath((Join-Path $Context.RootPath 'Rules\Packs')).TrimEnd('\') + '\'
                 if ($canonicalPack.StartsWith($expectedRoot, [StringComparison]::OrdinalIgnoreCase)) {
-                    $signatureValid = $true
+                    $trusted = $true
                     $trustReason = 'Bundled release pack with verified file hashes.'
                 } else {
-                    $errors.Add('Bundled trustMode is allowed only inside the application Rules\Packs directory.')
+                    $errors += 'bundled trustMode is allowed only inside Rules\Packs.'
                 }
             }
             'signed' {
                 try {
-                    if (-not $manifest.signature -or -not $manifest.signature.keyId -or -not $manifest.signature.value) {
+                    $signatureObject = Get-VoidGuardPropertyValue $manifest 'signature' $null
+                    $keyId = [string](Get-VoidGuardPropertyValue $signatureObject 'keyId' '')
+                    $algorithm = [string](Get-VoidGuardPropertyValue $signatureObject 'algorithm' '')
+                    $signatureValue = [string](Get-VoidGuardPropertyValue $signatureObject 'value' '')
+                    if ([string]::IsNullOrWhiteSpace($keyId) -or [string]::IsNullOrWhiteSpace($signatureValue)) {
                         throw 'Detached signature metadata is missing.'
                     }
-                    $publishers = Get-VoidGuardTrustedPublishers -RootPath $Context.RootPath
-                    $keyId = [string]$manifest.signature.keyId
-                    if (-not $publishers.ContainsKey($keyId)) { throw "Publisher key is not trusted: $keyId" }
-                    if ([string]$manifest.signature.algorithm -ne 'RSA-SHA256') { throw 'Unsupported signature algorithm.' }
+                    if ($algorithm -ne 'RSA-SHA256') { throw 'Unsupported signature algorithm.' }
 
-                    $rsa = New-Object Security.Cryptography.RSACryptoServiceProvider
+                    $publishers = Get-VoidGuardTrustedPublishers -RootPath $Context.RootPath
+                    if (-not $publishers.ContainsKey($keyId)) { throw "Publisher key is not trusted: $keyId" }
+                    $rsaXml = [string](Get-VoidGuardPropertyValue $publishers[$keyId] 'rsaXml' '')
+                    $rsa = [Security.Cryptography.RSA]::Create()
                     try {
-                        $rsa.FromXmlString([string]$publishers[$keyId].rsaXml)
+                        Import-VoidGuardRsaPublicKey -Rsa $rsa -RsaXml $rsaXml
                         $payload = ConvertTo-VoidGuardRulePackPayload -Manifest $manifest
                         $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
-                        $signature = [Convert]::FromBase64String([string]$manifest.signature.value)
-                        $oid = [Security.Cryptography.CryptoConfig]::MapNameToOID('SHA256')
-                        $signatureValid = $rsa.VerifyData($bytes, $oid, $signature)
+                        $signature = [Convert]::FromBase64String($signatureValue)
+                        $trusted = $rsa.VerifyData(
+                            $bytes,
+                            $signature,
+                            [Security.Cryptography.HashAlgorithmName]::SHA256,
+                            [Security.Cryptography.RSASignaturePadding]::Pkcs1
+                        )
                     } finally {
                         $rsa.Dispose()
                     }
-                    if (-not $signatureValid) { throw 'RSA signature verification failed.' }
+                    if (-not $trusted) { throw 'RSA signature verification failed.' }
                     $trustReason = "Signed by trusted key $keyId."
                 } catch {
-                    $errors.Add($_.Exception.Message)
+                    $errors += $_.Exception.Message
+                    $trusted = $false
                 }
             }
             'local' {
                 $allowLocal = [bool](Get-VoidGuardRuleSetting -Settings $Context.Settings -Name 'allowUnsignedLocalRulePacks' -DefaultValue $false)
                 if ($allowLocal) {
-                    $signatureValid = $true
+                    $trusted = $true
                     $trustReason = 'Unsigned local pack allowed by explicit configuration.'
-                    $warnings.Add('Unsigned local rule packs can change detection behavior.')
+                    $warnings += 'Unsigned local rule packs can change detection behavior.'
                 } else {
-                    $errors.Add('Unsigned local rule packs are disabled.')
+                    $errors += 'Unsigned local rule packs are disabled.'
                 }
             }
         }
     }
 
-    $enabledIds = @((Get-VoidGuardRuleSetting -Settings $Context.Settings -Name 'enabledRulePacks' -DefaultValue @()))
-    $enabled = $manifest -and ($enabledIds.Count -eq 0 -or $enabledIds -contains [string]$manifest.id)
+    $enabledIds = @(Get-VoidGuardRuleSetting -Settings $Context.Settings -Name 'enabledRulePacks' -DefaultValue @())
+    $enabled = $manifest -and ($enabledIds.Count -eq 0 -or $enabledIds -contains $packId)
 
     return [pscustomobject]@{
-        Id = if ($manifest) { [string]$manifest.id } else { Split-Path -Leaf $PackPath }
-        Name = if ($manifest) { [string]$manifest.name } else { $null }
-        Version = if ($manifest) { [string]$manifest.version } else { $null }
-        Publisher = if ($manifest) { [string]$manifest.publisher } else { $null }
+        Id = $packId
+        Name = $packName
+        Version = $packVersion
+        Publisher = $publisher
         PackPath = $canonicalPack
         Enabled = [bool]$enabled
         IntegrityValid = ($errors.Count -eq 0)
-        Trusted = ($errors.Count -eq 0 -and $signatureValid)
+        Trusted = ($errors.Count -eq 0 -and $trusted)
         TrustReason = $trustReason
-        Errors = @($errors)
-        Warnings = @($warnings)
-        Files = @($verifiedFiles)
+        Errors = $errors
+        Warnings = $warnings
+        Files = $verifiedFiles
         Manifest = $manifest
     }
 }
@@ -199,13 +270,12 @@ function Get-VoidGuardRulePackInventory {
     param([Parameter(Mandatory)]$Context)
 
     $root = Join-Path $Context.RootPath 'Rules\Packs'
-    if (-not (Test-Path -LiteralPath $root)) { return @() }
-
-    $items = New-Object System.Collections.Generic.List[object]
+    if (-not (Test-Path -LiteralPath $root -PathType Container)) { return @() }
+    $items = @()
     foreach ($directory in Get-ChildItem -LiteralPath $root -Directory -Force -ErrorAction SilentlyContinue) {
-        $items.Add((Test-VoidGuardRulePack -PackPath $directory.FullName -Context $Context))
+        $items += Test-VoidGuardRulePack -PackPath $directory.FullName -Context $Context
     }
-    return @($items | Sort-Object Id)
+    return $items | Sort-Object Id
 }
 
 function Get-VoidGuardRuleEngineState {
@@ -213,43 +283,45 @@ function Get-VoidGuardRuleEngineState {
     param([Parameter(Mandatory)]$Context)
 
     $inventory = @(Get-VoidGuardRulePackInventory -Context $Context)
-    $patterns = New-Object System.Collections.Generic.List[object]
-    $yaraFiles = New-Object System.Collections.Generic.List[string]
+    $patterns = @()
+    $yaraFiles = @()
 
     foreach ($pack in @($inventory | Where-Object { $_.Enabled -and $_.Trusted -and $_.IntegrityValid })) {
         foreach ($file in @($pack.Files)) {
-            switch ($file.Type) {
+            switch ([string]$file.Type) {
                 'pattern' {
                     try {
                         $rules = Get-Content -LiteralPath $file.Path -Raw -Encoding UTF8 | ConvertFrom-Json
                         foreach ($rule in @($rules)) {
-                            $regex = New-Object Text.RegularExpressions.Regex(
-                                [string]$rule.pattern,
+                            $pattern = [string](Get-VoidGuardPropertyValue $rule 'pattern' '')
+                            $regex = [regex]::new(
+                                $pattern,
                                 [Text.RegularExpressions.RegexOptions]::CultureInvariant,
                                 [TimeSpan]::FromMilliseconds(300)
                             )
-                            $patterns.Add([pscustomobject]@{
+                            $extensions = @((Get-VoidGuardPropertyValue $rule 'extensions' @()) | ForEach-Object { ([string]$_).ToLowerInvariant() })
+                            $patterns += [pscustomobject]@{
                                 PackId = $pack.Id
-                                Id = [string]$rule.id
-                                Extensions = @($rule.extensions | ForEach-Object { ([string]$_).ToLowerInvariant() })
+                                Id = [string](Get-VoidGuardPropertyValue $rule 'id' '')
+                                Extensions = $extensions
                                 Regex = $regex
-                                Score = [int]$rule.score
-                                Reason = [string]$rule.reason
-                                MaxBytes = if ($rule.maxBytes) { [int]$rule.maxBytes } else { 1048576 }
-                            })
+                                Score = [int](Get-VoidGuardPropertyValue $rule 'score' 0)
+                                Reason = [string](Get-VoidGuardPropertyValue $rule 'reason' '')
+                                MaxBytes = [int](Get-VoidGuardPropertyValue $rule 'maxBytes' 1048576)
+                            }
                         }
                     } catch {
                     }
                 }
-                'yara' { $yaraFiles.Add([string]$file.Path) }
+                'yara' { $yaraFiles += [string]$file.Path }
             }
         }
     }
 
     return [pscustomobject]@{
         Inventory = $inventory
-        Patterns = @($patterns)
-        YaraRuleFiles = @($yaraFiles)
+        Patterns = $patterns
+        YaraRuleFiles = $yaraFiles
         Yara = Get-VoidGuardYaraStatus -Context $Context
     }
 }
@@ -263,7 +335,6 @@ function Get-VoidGuardYaraExecutable {
         $expanded = [Environment]::ExpandEnvironmentVariables($configured)
         if (Test-Path -LiteralPath $expanded -PathType Leaf) { return (Get-Item -LiteralPath $expanded).FullName }
     }
-
     foreach ($name in @('yara64.exe', 'yara.exe', 'yara64', 'yara')) {
         $command = Get-Command $name -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($command) { return [string]$command.Source }
@@ -317,7 +388,6 @@ function Get-VoidGuardYaraStatus {
     if (-not $executable) {
         return [pscustomobject]@{ Available = $false; Executable = $null; Version = $null; Error = 'YARA CLI not found.' }
     }
-
     $result = Invoke-VoidGuardYaraProcess -Executable $executable -Arguments '--version' -TimeoutSeconds 5
     return [pscustomobject]@{
         Available = [bool]$result.Success
@@ -337,8 +407,8 @@ function Invoke-VoidGuardYaraScan {
 
     $canonical = Get-VoidGuardCanonicalPath -Path $Path
     $status = Get-VoidGuardYaraStatus -Context $Context
-    $matches = New-Object System.Collections.Generic.List[object]
-    $errors = New-Object System.Collections.Generic.List[string]
+    $matches = @()
+    $errors = @()
     if (-not $status.Available) {
         return [pscustomobject]@{ Available = $false; Executable = $status.Executable; Matches = @(); Errors = @($status.Error); TimedOut = $false }
     }
@@ -353,7 +423,7 @@ function Invoke-VoidGuardYaraScan {
         $result = Invoke-VoidGuardYaraProcess -Executable $status.Executable -Arguments $arguments -TimeoutSeconds $timeout
         if ($result.TimedOut) { $timedOut = $true }
         if (-not $result.Success) {
-            if ($result.Error) { $errors.Add([string]$result.Error) }
+            if ($result.Error) { $errors += [string]$result.Error }
             continue
         }
 
@@ -361,11 +431,11 @@ function Invoke-VoidGuardYaraScan {
             $trimmed = $line.Trim()
             if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
             $parts = $trimmed -split '\s+', 2
-            $matches.Add([pscustomobject]@{
+            $matches += [pscustomobject]@{
                 Rule = $parts[0]
                 RuleFile = $ruleFile
                 Output = $trimmed
-            })
+            }
         }
     }
 
@@ -373,7 +443,7 @@ function Invoke-VoidGuardYaraScan {
         Available = $true
         Executable = $status.Executable
         Matches = @($matches | Sort-Object Rule -Unique)
-        Errors = @($errors)
+        Errors = $errors
         TimedOut = $timedOut
     }
 }
