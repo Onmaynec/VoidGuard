@@ -3,8 +3,10 @@
 Rules/Packs/** text eol=lf
 Rules/trusted-publishers.json text eol=lf
 
-# PowerShell and documentation remain text, but Git may use platform defaults.
+# Windows PowerShell 5.1 requires UTF-8 BOM for non-ASCII source.
+# BOM bytes are stored in the tracked PowerShell files and verified by CI.
 *.ps1 text
 *.psm1 text
+*.psd1 text
 *.md text
 *.json text
