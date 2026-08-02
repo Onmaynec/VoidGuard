@@ -1,7 +1,7 @@
 ﻿#requires -Version 5.1
 Set-StrictMode -Version Latest
 
-function Repair-VoidGuardGenericListMaterialization {
+function Repair-VoidGuardPowerShell51Runtime {
     [CmdletBinding()]
     param()
 
@@ -29,26 +29,37 @@ function Repair-VoidGuardGenericListMaterialization {
                 if ($null -eq $scriptBlockProperty -or $null -eq $scriptBlockProperty.Value) { continue }
 
                 $definition = $scriptBlockProperty.Value.ToString()
-                if ($definition -notmatch 'System\.Collections\.Generic\.List') { continue }
-
-                $listNames = @(
-                    [regex]::Matches(
-                        $definition,
-                        '\$(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*New-Object\s+["'']?System\.Collections\.Generic\.List',
-                        [Text.RegularExpressions.RegexOptions]::IgnoreCase
-                    ) | ForEach-Object { $_.Groups['name'].Value } | Select-Object -Unique
-                )
-
                 $patched = $definition
-                foreach ($listName in $listNames) {
-                    # Windows PowerShell 5.1 иногда падает с "Argument types do not match"
-                    # при прямом преобразовании Generic.List через @($list). ToArray()
-                    # устраняет ошибку и сохраняет обычный массив объектов.
-                    $patched = $patched.Replace(
-                        ('@($' + $listName + ')'),
-                        ('$' + $listName + '.ToArray()')
+
+                if ($definition -match 'System\.Collections\.Generic\.List') {
+                    $listNames = @(
+                        [regex]::Matches(
+                            $definition,
+                            '\$(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*New-Object\s+["'']?System\.Collections\.Generic\.List',
+                            [Text.RegularExpressions.RegexOptions]::IgnoreCase
+                        ) | ForEach-Object { $_.Groups['name'].Value } | Select-Object -Unique
                     )
+
+                    foreach ($listName in $listNames) {
+                        # Windows PowerShell 5.1 иногда падает с "Argument types do not match"
+                        # при прямом преобразовании Generic.List через @($list).
+                        $patched = $patched.Replace(
+                            ('@($' + $listName + ')'),
+                            ('$' + $listName + '.ToArray()')
+                        )
+                    }
                 }
+
+                # PowerShell разворачивает одноэлементный массив на выходе функции.
+                # Без явного @() свойство Count отсутствует у единственного FileInfo.
+                $patched = $patched.Replace(
+                    '$candidates = Get-VoidGuardScanCandidates -Paths @($resolved) -MaxFiles $maxFiles',
+                    '$candidates = @(Get-VoidGuardScanCandidates -Paths @($resolved) -MaxFiles $maxFiles)'
+                )
+                $patched = $patched.Replace(
+                    '$scanCandidates = Get-VoidGuardScanCandidates -Paths @($paths) -MaxFiles $maxFiles',
+                    '$scanCandidates = @(Get-VoidGuardScanCandidates -Paths @($paths) -MaxFiles $maxFiles)'
+                )
 
                 if ($patched -cne $definition) {
                     $implementation = [scriptblock]::Create($patched)
@@ -103,7 +114,7 @@ function Get-VoidGuardRuntimeHealth {
     }
 }
 
-Repair-VoidGuardGenericListMaterialization
+Repair-VoidGuardPowerShell51Runtime
 
 Export-ModuleMember -Function @(
     'Show-VGLoadingBar',
