@@ -47,10 +47,10 @@ function Invoke-VoidGuardQuarantine {
             Reasons = $policy.Reasons; Warnings = $policy.Warnings
         }
     }
-    if ($policy.ConfirmationRequired -and -not $Confirmed) {
+    if (-not $Confirmed) {
         return [pscustomobject]@{
             Success = $false; Status = 'CONFIRMATION_REQUIRED'; Path = $policy.CanonicalPath
-            Reasons = @(); Warnings = $policy.Warnings
+            Reasons = @('Every quarantine operation requires explicit confirmation.'); Warnings = $policy.Warnings
         }
     }
 
