@@ -74,14 +74,20 @@ Set-VoidGuardAnimationOptions -Enabled:$animationEnabled -DelayScale ([double]$s
 $context = New-VoidGuardContext -RootPath $script:VoidGuardRoot -Settings $settings -Professional:$Professional -NoAnimation:$NoAnimation
 
 function Write-ResultOutput {
-    param([Parameter(Mandatory)]$Value)
+    param([Parameter(Mandatory)][AllowNull()]$Value)
+
+    $normalizedValue = if ($null -eq $Value) { @() } else { $Value }
 
     if (-not [string]::IsNullOrWhiteSpace($ReportPath)) {
-        $reportFiles = @(Export-VoidGuardReportBundle -InputObject $Value -Context $context -OutputPath $ReportPath -Format $ReportFormat)
+        $reportFiles = @(Export-VoidGuardReportBundle -InputObject $normalizedValue -Context $context -OutputPath $ReportPath -Format $ReportFormat)
         foreach ($reportFile in $reportFiles) { Write-Host "[OK] Report: $reportFile" -ForegroundColor Green }
     }
 
-    if ($Json) { $Value | ConvertTo-Json -Depth 14 } else { $Value }
+    if ($Json) {
+        ConvertTo-Json -InputObject $normalizedValue -Depth 14
+    } else {
+        $normalizedValue
+    }
 }
 
 try {
