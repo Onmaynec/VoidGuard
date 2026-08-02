@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "tag": "v0.3.0",
+  "name": "VOIDGUARD v0.3.0 — SIGNATURE GRID",
+  "url": "https://github.com/Onmaynec/VoidGuard/releases/tag/v0.3.0",
+  "draft": false,
+  "prerelease": false,
+  "publishedAt": "2026-08-02T10:36:07Z",
+  "verifiedAtUtc": "2026-08-02T10:36:08.3714080Z",
+  "requiredAssets": [
+    "VoidGuard-v0.3.0-Portable.zip",
+    "VoidGuard-v0.3.0-Source.zip",
+    "SHA256SUMS.txt"
+  ],
+  "assets": [
+    {
+      "name": "SHA256SUMS.txt",
+      "size": 192,
+      "digest": "sha256:fd91647ae43449a9c36dbf4c24211f2ba6840451fcd9948e7afcf5c57ee4dca5",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.3.0/SHA256SUMS.txt"
+    },
+    {
+      "name": "VoidGuard-v0.3.0-Portable.zip",
+      "size": 58268,
+      "digest": "sha256:8e2646f9fbda0a8ca5a902ad04ea7b7e16056b5f87eba7d9518e242b32cf3f6e",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.3.0/VoidGuard-v0.3.0-Portable.zip"
+    },
+    {
+      "name": "VoidGuard-v0.3.0-Source.zip",
+      "size": 68922,
+      "digest": "sha256:8591dd8a1c05c93118499d7a27ad656df0c3bc87cfe4ee5997c64b8a02373c77",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.3.0/VoidGuard-v0.3.0-Source.zip"
+    }
+  ]
+}
