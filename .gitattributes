@@ -1,0 +1,10 @@
+# Rule-pack manifests verify exact file bytes. Keep those files LF-normalized
+# so SHA-256 values are identical on Windows and Unix checkouts.
+Rules/Packs/** text eol=lf
+Rules/trusted-publishers.json text eol=lf
+
+# PowerShell and documentation remain text, but Git may use platform defaults.
+*.ps1 text
+*.psm1 text
+*.md text
+*.json text
