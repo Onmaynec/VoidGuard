@@ -1,36 +1,85 @@
-# Архитектура VoidGuard v0.2.0
+# Архитектура VoidGuard v0.3.0
 
 ```text
 VoidGuard.ps1
  ├── VoidGuard.Animation    — визуальные эффекты
  ├── VoidGuard.Protection   — canonical path и системная policy
- ├── VoidGuard.Scanner      — файловая эвристика, SHA-256, Authenticode
+ ├── VoidGuard.RulePacks    — manifest, SHA-256, RSA trust и optional YARA
+ ├── VoidGuard.Scanner      — metadata, Authenticode, PE, entropy и scoring
  ├── VoidGuard.System       — Defender, Firewall, процессы, сеть, автозапуск
  ├── VoidGuard.Persistence  — Services, Scheduled Tasks, WMI, Run keys
  ├── VoidGuard.Remediation  — Restart Manager, process stop, delete-on-reboot
  ├── VoidGuard.Quarantine   — безопасное перемещение и восстановление
+ ├── VoidGuard.Reporting    — offline HTML/JSON serialization
  └── VoidGuard.UI           — TUI и управление клавиатурой
 ```
 
-## Trust boundary
+## Главный trust boundary
 
-TUI не обладает правом самостоятельно удалить файл или завершить процесс. Перед каждым действием низкоуровневый модуль повторно вызывает policy-проверки.
+TUI, rule packs, YARA и reports не обладают правом самостоятельно удалить файл или завершить процесс. Перед каждым изменяющим действием remediation/quarantine backend повторно выполняет policy-проверки.
 
 ```text
-User selection
-      ↓
-Canonical path resolution
-      ↓
-System / WRP / signature / owner / reparse checks
-      ↓
-Restart Manager lock inventory
-      ↓
+Untrusted file / process / persistence entry
+                 ↓
+Metadata + signature + hash + PE + entropy
+                 ↓
+Trusted pattern packs + optional YARA
+                 ↓
+Explainable risk result
+                 ↓
+          user review
+                 ↓
+Canonical path / WRP / owner / signature / reparse checks
+                 ↓
 Exact-process validation or delete-on-reboot
-      ↓
-Quarantine / pending ledger
-      ↓
-Post-reboot verification
+                 ↓
+Quarantine / pending ledger / post-reboot verification
 ```
+
+## Rule engine
+
+`VoidGuard.RulePacks` перечисляет каталоги в `Rules\Packs` и проверяет:
+
+- schema manifest;
+- id/version/trust mode;
+- отсутствие absolute path, `..` и выхода из pack root;
+- разрешённые расширения файлов правил;
+- SHA-256 каждого файла;
+- RSA-SHA256 detached signature для режима `signed`;
+- явное включение pack в конфигурации.
+
+Только packs с `Enabled`, `IntegrityValid` и `Trusted` участвуют в сканировании.
+
+### Trust modes
+
+- `bundled` — pack внутри `Rules\Packs` официального release archive;
+- `signed` — manifest payload проверен ключом из `Rules\trusted-publishers.json`;
+- `local` — запрещён по умолчанию, разрешается только явной настройкой.
+
+## Scanner pipeline
+
+Для каждого кандидата scanner может использовать:
+
+1. путь, атрибуты и расширение;
+2. SHA-256 и known-bad table;
+3. Authenticode;
+4. PE signature, machine, sections и compile timestamp;
+5. sample entropy;
+6. встроенные script patterns;
+7. regex rules из доверенных packs;
+8. YARA rules из доверенных packs, если CLI доступен.
+
+Каждый сигнал добавляет отдельную строку в `Reasons`. YARA не заменяет policy и не инициирует remediation.
+
+## Reporting
+
+`VoidGuard.Reporting` получает уже сформированный объект результата. Модуль:
+
+- не вызывает scan/remediation самостоятельно;
+- создаёт JSON schema envelope;
+- HTML-экранирует пути, причины и другие данные;
+- не вставляет JavaScript, внешние стили, шрифты или analytics;
+- может работать в полностью отключённой от сети среде.
 
 ## Остановка процесса
 
@@ -42,23 +91,9 @@ Post-reboot verification
 - файл процесса проходит `Test-VoidGuardProtectedTarget`;
 - пользователь передал явное подтверждение.
 
-Это специально исключает универсальный интерфейс `kill arbitrary PID`.
-
 ## Delete-on-reboot
 
-`Register-VoidGuardDeleteOnReboot` использует документированный Windows API `MoveFileEx` с `MOVEFILE_DELAY_UNTIL_REBOOT`. До регистрации сохраняются canonical path и SHA-256. После загрузки `Get-VoidGuardPendingRemediations -Verify` проверяет, остался ли объект.
-
-## Persistence Matrix
-
-Persistence engine объединяет:
-
-- Registry Run / RunOnce / Policies Explorer Run;
-- пользовательскую и общую Startup folder;
-- Win32 services;
-- Scheduled Tasks actions;
-- permanent WMI event consumers and bindings.
-
-Каждая запись получает объяснимый risk score на основе команды, расположения и анализа связанного файла.
+`Register-VoidGuardDeleteOnReboot` использует Windows API `MoveFileEx` с `MOVEFILE_DELAY_UNTIL_REBOOT`. До регистрации сохраняются canonical path и SHA-256. После загрузки ledger различает удалённый, оставшийся и заменённый другим хешем объект.
 
 ## Реальные и декоративные события
 
@@ -66,7 +101,6 @@ Persistence engine объединяет:
 
 ## План развития
 
-- v0.3: HTML/JSON incident reports, экспорт bundle, расширенный PE-анализ;
-- v0.4: YARA и подписываемые rule packs;
-- v0.5: Defender Offline orchestration;
-- v1.0: стабильный CLI contract и signed release pipeline.
+- v0.4: Defender Offline orchestration и baseline/diff;
+- v0.5: безопасное обновление packs и incident bundle;
+- v1.0: стабильный CLI contract и подписанные приложения/релизы.
