@@ -1,33 +1,27 @@
-# VOIDGUARD v0.3.0 — SIGNATURE GRID
+# VOIDGUARD v0.3.1 — TERMINAL RECOVERY
 
-Третья публичная версия добавляет проверяемый rule engine, опциональную YARA-интеграцию, расширенный PE-анализ и автономные отчёты.
+Исправляющий релиз устраняет ошибку запуска в стандартном Windows PowerShell 5.1, при которой Unicode-символы интерфейса могли повреждаться до синтаксического разбора модулей.
 
-## Главное
+## Исправлено
 
-- `Rules/Packs` получает manifest-based trust model;
-- каждый файл pack проверяется по SHA-256 до загрузки;
-- внешние packs могут использовать detached RSA-SHA256 подпись и локальный trust store;
-- неподписанные local packs запрещены по умолчанию;
-- встроенный `voidguard.core` содержит defensive regex и YARA rules для LOLBin, persistence и Defender tamper patterns;
-- Quick/Custom Scan автоматически объединяет metadata, Authenticode, PE, entropy, rule-pack и YARA evidence;
-- PE parser показывает архитектуру, число секций и compile timestamp;
-- PE-содержимое с неисполняемым расширением получает отдельный сильный сигнал;
-- HTML/JSON reports создаются полностью офлайн и экранируют данные находок;
-- новые CLI-режимы: `RulePacks`, `Yara`, `-ReportPath`, `-ReportFormat`.
+- все отслеживаемые `.ps1`, `.psm1` и `.psd1` сохранены как UTF-8 с BOM;
+- `VoidGuard.Animation.psm1` корректно разбирается Windows PowerShell 5.1 с Unicode tree-символами, кириллицей и ASCII-art;
+- Portable ZIP и Source ZIP проходят дополнительную нормализацию кодировки перед упаковкой;
+- Source ZIP теперь собирается из отслеживаемых файлов через единый release builder, а не прямой `git archive`;
+- CI запускает репозиторий и оба распакованных релизных архива через настоящий `powershell.exe` 5.1;
+- CI отдельно проверяет BOM каждого PowerShell-файла в репозитории и архивах.
 
-## YARA
+## Причина ошибки
 
-YARA CLI не включён в release и не скачивается автоматически. VoidGuard использует только установленный пользователем `yara.exe` или `yara64.exe`. При его отсутствии основной scan engine продолжает работать без ошибки.
+PowerShell 7 корректно читает UTF-8 без BOM, поэтому прежний smoke test проходил. Windows PowerShell 5.1 интерпретировал такие файлы через системную ANSI-кодировку. Последовательности `├──`, `│`, кириллица и Unicode-логотип превращались в повреждённый текст, из-за чего parser сообщал `Unexpected token` и `Missing closing ')'`.
 
-## Trust boundary
+## Установка
 
-Rule packs и reports не получают полномочий remediation. Они только добавляют объяснимые evidence к результату. Карантин, process stop и delete-on-reboot по-прежнему проходят отдельные backend policy checks.
+1. Удалите распакованную папку `VoidGuard-v0.3.0-Source` или `VoidGuard-v0.3.0`.
+2. Скачайте `VoidGuard-v0.3.1-Portable.zip`.
+3. Распакуйте архив в новую папку.
+4. Запустите `VoidGuard.cmd`.
 
-## Запуск
+Обходной фикс для старого архива не требуется: используйте полностью пересобранный `v0.3.1`.
 
-1. Распакуйте `VoidGuard-v0.3.0-Portable.zip`.
-2. Запустите `VoidGuard.cmd` для обычного TUI.
-3. Посмотрите активные packs: `.\VoidGuard.ps1 -Mode RulePacks -Json`.
-4. Создайте отчёт: `.\VoidGuard.ps1 -Mode QuickScan -ReportPath .\Reports\quick -ReportFormat Both`.
-
-> VoidGuard не заменяет Microsoft Defender, EDR или офлайн-проверку при подозрении на rootkit/PPL/bootkit.
+> Функции обнаружения, YARA, rule packs и безопасной remediation не ослаблялись и не изменяли защитные границы.
