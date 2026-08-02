@@ -11,7 +11,7 @@ permissions:
 jobs:
   powershell-smoke:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -24,6 +24,10 @@ jobs:
         shell: pwsh
         run: ./Tests/ConsoleFix.Tests.ps1
 
+      - name: Run PowerShell 7 stability tests
+        shell: pwsh
+        run: ./Tests/Stability.Tests.ps1
+
       - name: Run Windows PowerShell 5.1 package compatibility tests
         shell: powershell
         run: ./Tests/PackageCompatibility.Tests.ps1
@@ -31,6 +35,10 @@ jobs:
       - name: Run Windows PowerShell 5.1 console regression tests
         shell: powershell
         run: ./Tests/ConsoleFix.Tests.ps1
+
+      - name: Run Windows PowerShell 5.1 stability tests
+        shell: powershell
+        run: ./Tests/Stability.Tests.ps1
 
       - name: Run Windows PowerShell 5.1 full mode regression tests
         shell: powershell
