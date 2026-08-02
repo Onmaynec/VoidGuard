@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "tag": "v0.3.1",
+  "name": "VOIDGUARD v0.3.1 — TERMINAL RECOVERY",
+  "url": "https://github.com/Onmaynec/VoidGuard/releases/tag/v0.3.1",
+  "draft": false,
+  "prerelease": false,
+  "publishedAt": "2026-08-02T11:36:46Z",
+  "verifiedAtUtc": "2026-08-02T11:36:47.5009971Z",
+  "requiredAssets": [
+    "VoidGuard-v0.3.1-Portable.zip",
+    "VoidGuard-v0.3.1-Source.zip",
+    "SHA256SUMS.txt"
+  ],
+  "assets": [
+    {
+      "name": "SHA256SUMS.txt",
+      "size": 192,
+      "digest": "sha256:2eb8c29cdeb24577738514b4e248cc3d07675ebd1f2458c6339af3f39ac77e31",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.3.1/SHA256SUMS.txt"
+    },
+    {
+      "name": "VoidGuard-v0.3.1-Portable.zip",
+      "size": 58803,
+      "digest": "sha256:7b79bc1a0ccff78f5eedf6e6720d46bce9b405285ed1e8196af89d7c20cca273",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.3.1/VoidGuard-v0.3.1-Portable.zip"
+    },
+    {
+      "name": "VoidGuard-v0.3.1-Source.zip",
+      "size": 71306,
+      "digest": "sha256:346d3a9a73d3111d6f38c0ddccf546859ca9f36d34ad1b801de0fb58b9185b4c",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.3.1/VoidGuard-v0.3.1-Source.zip"
+    }
+  ]
+}
