@@ -23,6 +23,7 @@
 - Quick/Custom Scan объединяет metadata, Authenticode, PE, entropy, rule-pack и YARA evidence;
 - лимит scan увеличен до 4000 файлов;
 - scan result включает inventory rule packs и статус YARA;
+- `.gitattributes` фиксирует LF для rule-pack файлов, чтобы manifest SHA-256 совпадал на Windows и Unix;
 - release documentation обновлена для `SIGNATURE GRID`.
 
 ### Безопасность
