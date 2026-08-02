@@ -19,7 +19,7 @@ PowerShell 5.1+ · Windows 10/11 · defensive security toolkit
 
 Декоративные эффекты всегда помечаются `[VISUAL]` и не участвуют в решении об угрозе. Реальный скоринг строится из проверяемых признаков: пути, подписи, SHA-256, PE-метаданных, энтропии, persistence, rule packs и опционального YARA.
 
-## Возможности v0.3.0 — SIGNATURE GRID
+## Возможности v0.3.1 — TERMINAL RECOVERY
 
 - полноэкранное TUI-меню с управлением стрелками и cinematic-эффектами;
 - Quick Scan и сканирование выбранного файла/каталога;
@@ -33,11 +33,12 @@ PowerShell 5.1+ · Windows 10/11 · defensive security toolkit
 - офлайн HTML и JSON reports без JavaScript, аналитики и внешних ресурсов;
 - Process Analyzer, `PERSISTENCE MATRIX` и расширенный Windows security status;
 - Windows Restart Manager, защищённый карантин и delete-on-reboot ledger;
+- проверенная совместимость с Windows PowerShell 5.1 и PowerShell 7;
 - JSON CLI для автоматизации.
 
 ## Установка
 
-Скачайте `VoidGuard-v0.3.0-Portable.zip` из **Releases**, распакуйте и запустите:
+Скачайте `VoidGuard-v0.3.1-Portable.zip` из **Releases**, распакуйте в новую папку и запустите:
 
 ```cmd
 VoidGuard.cmd
@@ -48,6 +49,8 @@ VoidGuard.cmd
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\VoidGuard.ps1
 ```
+
+> Не используйте архивы `v0.3.0`: в них PowerShell-файлы могли быть упакованы как UTF-8 без BOM, что ломало запуск через стандартный Windows PowerShell 5.1.
 
 YARA не входит в архив и не скачивается автоматически. Без него VoidGuard продолжает использовать встроенные правила, PE-анализ и эвристику.
 

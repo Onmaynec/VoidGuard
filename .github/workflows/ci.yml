@@ -11,11 +11,15 @@ permissions:
 jobs:
   powershell-smoke:
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Run parser and smoke tests
+      - name: Run PowerShell 7 parser and smoke tests
         shell: pwsh
         run: ./Tests/Smoke.Tests.ps1
+
+      - name: Run Windows PowerShell 5.1 package compatibility tests
+        shell: powershell
+        run: ./Tests/PackageCompatibility.Tests.ps1
