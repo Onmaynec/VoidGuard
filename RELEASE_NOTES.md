@@ -1,20 +1,27 @@
-# VOIDGUARD v0.1.0 — INITIAL ACCESS DENIED
+# VOIDGUARD v0.2.0 — LOCKDOWN PROTOCOL
 
-Первая публичная версия консольного Windows threat-inspection toolkit на PowerShell.
+Вторая публичная версия превращает VoidGuard из базового инспектора в безопасную консоль анализа закрепления и remediation занятых файлов.
 
-## Что внутри
+## Главное
 
-- полноэкранное меню со стрелками и cinematic-анимациями;
-- реальные quick/custom scan режимы;
-- анализ процессов, автозапуска и Windows security state;
-- безопасный карантин с SHA-256 и возможностью восстановления;
-- жёсткая защита системных и Microsoft-signed файлов;
-- JSON-режим для автоматизации.
+- Windows Restart Manager определяет процессы и службы, реально удерживающие файл;
+- точный вредоносный executable можно остановить только после повторной проверки политики и ручного подтверждения;
+- заблокированный файл можно назначить на удаление при следующей загрузке Windows;
+- pending remediation ledger сохраняет путь, SHA-256 и проверяет результат после перезагрузки;
+- новая `PERSISTENCE MATRIX` анализирует Run/RunOnce, Startup folders, Services, Scheduled Tasks и WMI subscriptions;
+- процесс-анализатор показывает command line, parent PID и установленные TCP-соединения;
+- security status теперь показывает exclusions Defender, SmartScreen, proxy и время изменения hosts;
+- обновлено TUI-меню и добавлены новые JSON CLI-режимы.
+
+## Защитные ограничения
+
+VoidGuard по-прежнему блокирует Windows/Program Files, WRP, Microsoft-signed, TrustedInstaller, reparse-point и критические процессные цели. Процесс нельзя завершить, если путь его исполняемого файла не совпадает с выбранным объектом.
 
 ## Запуск
 
-1. Распакуйте `VoidGuard-v0.1.0-Portable.zip`.
+1. Распакуйте `VoidGuard-v0.2.0-Portable.zip`.
 2. Запустите `VoidGuard.cmd`.
-3. Для расширенного просмотра статуса используйте обычный запуск; для операций, требующих доступа, запустите CMD от администратора.
+3. Для remediation запустите CMD от администратора.
+4. После scheduled deletion перезагрузите Windows и откройте `PENDING REMEDIATION LEDGER`.
 
-> VoidGuard не заменяет Microsoft Defender и не гарантирует отсутствие вредоносного ПО.
+> VoidGuard не заменяет Microsoft Defender, EDR или офлайн-проверку при подозрении на rootkit/PPL/bootkit.

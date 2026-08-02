@@ -24,14 +24,10 @@ function Get-VoidGuardQuarantineItems {
 
     $root = Get-VoidGuardQuarantineRoot
     $items = New-Object System.Collections.Generic.List[object]
-
     Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue | ForEach-Object {
         $metadataPath = Join-Path $_.FullName 'metadata.json'
         if (Test-Path -LiteralPath $metadataPath) {
-            try {
-                $items.Add((Get-Content -LiteralPath $metadataPath -Raw -Encoding UTF8 | ConvertFrom-Json))
-            } catch {
-            }
+            try { $items.Add((Get-Content -LiteralPath $metadataPath -Raw -Encoding UTF8 | ConvertFrom-Json)) } catch { }
         }
     }
     return @($items | Sort-Object QuarantinedUtc -Descending)
@@ -47,33 +43,26 @@ function Invoke-VoidGuardQuarantine {
     $policy = Test-VoidGuardProtectedTarget -Path $Path
     if (-not $policy.Allowed) {
         return [pscustomobject]@{
-            Success = $false
-            Status  = 'BLOCKED_SYSTEM_POLICY'
-            Path    = $Path
-            Reasons = $policy.Reasons
-            Warnings = $policy.Warnings
+            Success = $false; Status = 'BLOCKED_SYSTEM_POLICY'; Path = $Path
+            Reasons = $policy.Reasons; Warnings = $policy.Warnings
         }
     }
-
-    if ($policy.ConfirmationRequired -and -not $Confirmed) {
+    if (-not $Confirmed) {
         return [pscustomobject]@{
-            Success = $false
-            Status  = 'CONFIRMATION_REQUIRED'
-            Path    = $policy.CanonicalPath
-            Reasons = @()
-            Warnings = $policy.Warnings
+            Success = $false; Status = 'CONFIRMATION_REQUIRED'; Path = $policy.CanonicalPath
+            Reasons = @('Every quarantine operation requires explicit confirmation.'); Warnings = $policy.Warnings
         }
     }
 
-    $locking = Get-VoidGuardLockingProcesses -Path $policy.CanonicalPath
+    $locking = @(Get-VoidGuardFileLockOwners -Path $policy.CanonicalPath)
     if ($locking.Count -gt 0) {
         return [pscustomobject]@{
-            Success  = $false
-            Status   = 'LOCKED_BY_PROCESS'
-            Path     = $policy.CanonicalPath
+            Success   = $false
+            Status    = 'LOCKED_BY_PROCESS'
+            Path      = $policy.CanonicalPath
             Processes = $locking
-            Reasons  = @('v0.1.0 does not forcibly terminate processes. Close the listed process and retry.')
-            Warnings = $policy.Warnings
+            Reasons   = @('File is in use. Stop only an exact target process or schedule deletion for the next boot.')
+            Warnings  = $policy.Warnings
         }
     }
 
@@ -85,32 +74,29 @@ function Invoke-VoidGuardQuarantine {
 
     $payloadPath = Join-Path $container 'payload.vgq'
     $metadataPath = Join-Path $container 'metadata.json'
-
     if ($PSCmdlet.ShouldProcess($item.FullName, 'Move file into VoidGuard quarantine')) {
         try {
             Move-Item -LiteralPath $item.FullName -Destination $payloadPath -Force -ErrorAction Stop
         } catch {
             Remove-Item -LiteralPath $container -Recurse -Force -ErrorAction SilentlyContinue
             return [pscustomobject]@{
-                Success = $false
-                Status  = 'MOVE_FAILED'
-                Path    = $item.FullName
-                Reasons = @($_.Exception.Message)
-                Warnings = $policy.Warnings
+                Success = $false; Status = 'MOVE_FAILED'; Path = $item.FullName
+                Reasons = @($_.Exception.Message); Warnings = $policy.Warnings
             }
         }
     }
 
     $metadata = [ordered]@{
-        Id             = $id
-        OriginalPath   = $item.FullName
-        PayloadPath    = $payloadPath
-        OriginalName   = $item.Name
-        Size           = [long]$item.Length
-        SHA256         = $hash
-        QuarantinedUtc = (Get-Date).ToUniversalTime()
-        Restorable     = $true
-        PolicyWarnings = @($policy.Warnings)
+        SchemaVersion   = 2
+        Id              = $id
+        OriginalPath    = $item.FullName
+        PayloadPath     = $payloadPath
+        OriginalName    = $item.Name
+        Size            = [long]$item.Length
+        SHA256          = $hash
+        QuarantinedUtc  = (Get-Date).ToUniversalTime()
+        Restorable      = $true
+        PolicyWarnings  = @($policy.Warnings)
     }
     $metadata | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
 
@@ -118,19 +104,12 @@ function Invoke-VoidGuardQuarantine {
         try {
             & icacls.exe $container /inheritance:r /grant:r "${env:USERNAME}:(OI)(CI)F" /c /q | Out-Null
             attrib.exe +h $container 2>$null
-        } catch {
-        }
+        } catch { }
     }
 
     return [pscustomobject]@{
-        Success = $true
-        Status  = 'QUARANTINED'
-        Id      = $id
-        Path    = $item.FullName
-        SHA256  = $hash
-        Vault   = $container
-        Reasons = @()
-        Warnings = $policy.Warnings
+        Success = $true; Status = 'QUARANTINED'; Id = $id; Path = $item.FullName
+        SHA256 = $hash; Vault = $container; Reasons = @(); Warnings = $policy.Warnings
     }
 }
 
@@ -164,12 +143,7 @@ function Restore-VoidGuardQuarantineItem {
         Remove-Item -LiteralPath $container -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    return [pscustomobject]@{
-        Success = $true
-        Status  = 'RESTORED'
-        Id      = $Id
-        Path    = $destination
-    }
+    return [pscustomobject]@{ Success = $true; Status = 'RESTORED'; Id = $Id; Path = $destination }
 }
 
 Export-ModuleMember -Function @(

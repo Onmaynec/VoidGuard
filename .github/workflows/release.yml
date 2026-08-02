@@ -33,7 +33,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve version
+      - name: Resolve version and title
         id: version
         shell: pwsh
         run: |
@@ -41,8 +41,14 @@ jobs:
           if ($version -notmatch '^\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$') {
             throw "Invalid VERSION: $version"
           }
+          $heading = Get-Content -LiteralPath RELEASE_NOTES.md -Encoding UTF8 |
+            Where-Object { $_ -match '^#\s+\S' } |
+            Select-Object -First 1
+          if (-not $heading) { throw 'RELEASE_NOTES.md must contain an H1 heading.' }
+          $title = ($heading -replace '^#\s+', '').Trim()
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
+          "title=$title" >> $env:GITHUB_OUTPUT
 
       - name: Check existing release
         id: existing
@@ -100,6 +106,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_TITLE: ${{ steps.version.outputs.title }}
         run: |
           $ErrorActionPreference = 'Stop'
           git config user.name 'github-actions[bot]'
@@ -123,7 +130,7 @@ jobs:
             "dist/VoidGuard-v$env:VERSION-Source.zip" `
             'dist/SHA256SUMS.txt' `
             --repo $env:GITHUB_REPOSITORY `
-            --title "VOIDGUARD $env:TAG — Initial Access Denied" `
+            --title $env:RELEASE_TITLE `
             --notes-file RELEASE_NOTES.md `
             --latest
           if ($LASTEXITCODE -ne 0) { throw 'GitHub Release creation failed.' }
