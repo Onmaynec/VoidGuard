@@ -9,7 +9,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('Interactive', 'QuickScan', 'CustomScan', 'Status', 'Processes', 'Persistence', 'Locks', 'Remediate', 'Pending', 'RulePacks', 'Yara', 'Demo')]
+    [ValidateSet('Interactive', 'QuickScan', 'CustomScan', 'Status', 'Processes', 'Persistence', 'Locks', 'Remediate', 'Pending', 'RulePacks', 'Yara', 'Demo', 'SelfTest')]
     [string]$Mode = 'Interactive',
 
     [string]$Path,
@@ -57,7 +57,8 @@ $moduleOrder = @(
     'VoidGuard.Quarantine.psm1',
     'VoidGuard.Reporting.psm1',
     'VoidGuard.UI.psm1',
-    'VoidGuard.ConsoleFix.psm1'
+    'VoidGuard.ConsoleFix.psm1',
+    'VoidGuard.Stability.psm1'
 )
 
 foreach ($moduleName in $moduleOrder) {
@@ -73,14 +74,26 @@ Set-VoidGuardAnimationOptions -Enabled:$animationEnabled -DelayScale ([double]$s
 $context = New-VoidGuardContext -RootPath $script:VoidGuardRoot -Settings $settings -Professional:$Professional -NoAnimation:$NoAnimation
 
 function Write-ResultOutput {
-    param([Parameter(Mandatory)]$Value)
+    param([Parameter(Mandatory)][AllowNull()]$Value)
+
+    if ($null -eq $Value) {
+        if ($Json) {
+            Write-Output '[]'
+            return
+        }
+        return
+    }
 
     if (-not [string]::IsNullOrWhiteSpace($ReportPath)) {
         $reportFiles = @(Export-VoidGuardReportBundle -InputObject $Value -Context $context -OutputPath $ReportPath -Format $ReportFormat)
         foreach ($reportFile in $reportFiles) { Write-Host "[OK] Report: $reportFile" -ForegroundColor Green }
     }
 
-    if ($Json) { $Value | ConvertTo-Json -Depth 14 } else { $Value }
+    if ($Json) {
+        ConvertTo-Json -InputObject $Value -Depth 14
+    } else {
+        $Value
+    }
 }
 
 try {
@@ -144,12 +157,24 @@ try {
         'Demo' {
             Show-VoidGuardVisualDemo -RootPath $script:VoidGuardRoot
         }
+        'SelfTest' {
+            Write-ResultOutput (Get-VoidGuardRuntimeHealth)
+        }
     }
 } catch {
     if ($Json) {
-        [pscustomobject]@{ success = $false; error = $_.Exception.Message } | ConvertTo-Json -Depth 5
+        [pscustomobject]@{
+            success = $false
+            error = $_.Exception.Message
+            type = $_.Exception.GetType().FullName
+            position = $_.InvocationInfo.PositionMessage
+            stack = $_.ScriptStackTrace
+        } | ConvertTo-Json -Depth 6
     } else {
         Write-Host "[ERROR] $($_.Exception.Message)" -ForegroundColor Red
+        if ($_.InvocationInfo.PositionMessage) {
+            Write-Host $_.InvocationInfo.PositionMessage -ForegroundColor DarkRed
+        }
     }
     exit 1
 }

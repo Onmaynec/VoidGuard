@@ -19,11 +19,15 @@ PowerShell 5.1+ · Windows 10/11 · defensive security toolkit
 
 Декоративные эффекты всегда помечаются `[VISUAL]` и не участвуют в решении об угрозе. Реальный скоринг строится из проверяемых признаков: пути, подписи, SHA-256, PE-метаданных, энтропии, persistence, rule packs и опционального YARA.
 
-## Возможности v0.3.2 — СТАБИЛЬНОЕ МЕНЮ
+## Возможности v0.3.3 — МАКСИМАЛЬНАЯ СТАБИЛЬНОСТЬ
 
 - полноэкранное TUI-меню с управлением стрелками и cinematic-эффектами;
 - исправленное форматирование пунктов меню в Windows PowerShell 5.1;
 - автоматическое центрирование стартового черепа относительно логотипа VOIDGUARD;
+- защищённый цикл меню: ошибка отдельной операции больше не закрывает всю программу;
+- встроенный пункт `SYSTEM SELF-TEST` и CLI-режим `SelfTest` для проверки обязательных компонентов;
+- совместимые обёртки Quick Scan и Custom Scan без ошибок одноэлементных массивов и `Generic.List` в PowerShell 5.1;
+- корректный JSON `[]` для пустых результатов Processes, Pending и Locks;
 - Quick Scan и сканирование выбранного файла/каталога;
 - SHA-256, Authenticode, двойные расширения и скриптовые эвристики;
 - PE parser: архитектура, секции, compile timestamp и несоответствие расширения содержимому;
@@ -40,7 +44,7 @@ PowerShell 5.1+ · Windows 10/11 · defensive security toolkit
 
 ## Установка
 
-Скачайте `VoidGuard-v0.3.2-Portable.zip` из **Releases**, распакуйте в новую папку и запустите:
+Скачайте `VoidGuard-v0.3.3-Portable.zip` из **Releases**, распакуйте в новую папку и запустите:
 
 ```cmd
 VoidGuard.cmd
@@ -52,7 +56,13 @@ VoidGuard.cmd
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\VoidGuard.ps1
 ```
 
-> Не используйте архивы `v0.3.0`: в них PowerShell-файлы могли быть упакованы как UTF-8 без BOM, что ломало запуск через стандартный Windows PowerShell 5.1.
+Проверка загрузки всех обязательных компонентов:
+
+```powershell
+.\VoidGuard.ps1 -Mode SelfTest -Professional -NoAnimation -Json
+```
+
+> Не смешивайте файлы разных версий. Полностью удалите старую распакованную папку и распакуйте `v0.3.3` в новую.
 
 YARA не входит в архив и не скачивается автоматически. Без него VoidGuard продолжает использовать встроенные правила, PE-анализ и эвристику.
 
@@ -73,6 +83,9 @@ Pack активируется только после проверки:
 ## CLI
 
 ```powershell
+# Самопроверка среды
+.\VoidGuard.ps1 -Mode SelfTest -Professional -NoAnimation -Json
+
 # Сканирование с автоматическим rule engine
 .\VoidGuard.ps1 -Mode QuickScan -Professional
 .\VoidGuard.ps1 -Mode CustomScan -Path "C:\Downloads" -Json
@@ -106,6 +119,10 @@ Pack активируется только после проверки:
 - [Reports](docs/REPORTS.md)
 - [Safe remediation](docs/REMEDIATION.md)
 - [Архитектура](docs/ARCHITECTURE.md)
+
+## Проверки стабильности
+
+CI запускает отдельные проверки в PowerShell 7 и Windows PowerShell 5.1. Полный прогон реально запускает `SelfTest`, `Status`, `Processes`, `Persistence`, `Pending`, `RulePacks`, `QuickScan`, `CustomScan`, `Locks`, `Yara`, безопасный dry-run remediation, генерацию HTML/JSON-отчётов и визуальную демонстрацию.
 
 ## Безопасность remediation
 
