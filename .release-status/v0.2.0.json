@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "tag": "v0.2.0",
+  "name": "VOIDGUARD v0.2.0 — LOCKDOWN PROTOCOL",
+  "url": "https://github.com/Onmaynec/VoidGuard/releases/tag/v0.2.0",
+  "draft": false,
+  "prerelease": false,
+  "publishedAt": "2026-08-02T09:48:00Z",
+  "verifiedAtUtc": "2026-08-02T09:48:01.9903575Z",
+  "requiredAssets": [
+    "VoidGuard-v0.2.0-Portable.zip",
+    "VoidGuard-v0.2.0-Source.zip",
+    "SHA256SUMS.txt"
+  ],
+  "assets": [
+    {
+      "name": "SHA256SUMS.txt",
+      "size": 192,
+      "digest": "sha256:854bdba2da37be224ae2a831552ab19739a2cf1aae80b2cf51cc563192c5441c",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.2.0/SHA256SUMS.txt"
+    },
+    {
+      "name": "VoidGuard-v0.2.0-Portable.zip",
+      "size": 40000,
+      "digest": "sha256:082ce4adca483d7137d73edc8a7adcaa2fc8a4c0c255931d63dba05c1e39a4d8",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.2.0/VoidGuard-v0.2.0-Portable.zip"
+    },
+    {
+      "name": "VoidGuard-v0.2.0-Source.zip",
+      "size": 48231,
+      "digest": "sha256:ec39382cb9f99990d3883b47266716e1aec18380fb61584c9cd35cb89af95dae",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.2.0/VoidGuard-v0.2.0-Source.zip"
+    }
+  ]
+}
