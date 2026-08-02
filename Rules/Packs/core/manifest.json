@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "voidguard.core",
+  "name": "VoidGuard Core Defensive Rules",
+  "version": "1.0.0",
+  "publisher": "VoidGuard Project",
+  "trustMode": "bundled",
+  "minimumVoidGuardVersion": "0.3.0",
+  "files": [
+    {
+      "path": "detections.json",
+      "sha256": "274C32D1A8A952000F70E58FC92017EE691755D2706C3B6EEC910AD69C454478",
+      "type": "pattern"
+    },
+    {
+      "path": "core.yar",
+      "sha256": "CCCF10365CA77BDFC4F9CD81C310C5FF27F26C7204916AF83FEBEE859701A394",
+      "type": "yara"
+    }
+  ],
+  "signature": null
+}
