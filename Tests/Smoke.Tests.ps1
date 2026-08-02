@@ -40,9 +40,15 @@ if ([int]$settings.maxFilesPerScan -lt 1) {
     throw 'maxFilesPerScan must be positive.'
 }
 
-& (Join-Path $root 'VoidGuard.ps1') -Mode Status -Professional -NoAnimation -Json | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    throw "Status smoke test failed with exit code $LASTEXITCODE"
+try {
+    $statusOutput = & (Join-Path $root 'VoidGuard.ps1') -Mode Status -Professional -NoAnimation -Json
+    $statusText = $statusOutput | Out-String
+    if ([string]::IsNullOrWhiteSpace($statusText)) {
+        throw 'Status command returned no output.'
+    }
+    $null = $statusText | ConvertFrom-Json
+} catch {
+    throw "Status smoke test failed: $($_.Exception.Message)"
 }
 
 Write-Host 'VoidGuard smoke tests passed.' -ForegroundColor Green
