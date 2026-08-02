@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "tag": "v0.3.3",
+  "name": "VOIDGUARD v0.3.3 — МАКСИМАЛЬНАЯ СТАБИЛЬНОСТЬ",
+  "url": "https://github.com/Onmaynec/VoidGuard/releases/tag/v0.3.3",
+  "draft": false,
+  "prerelease": false,
+  "publishedAt": "2026-08-02T13:35:47Z",
+  "verifiedAtUtc": "2026-08-02T13:35:48.9946142Z",
+  "requiredAssets": [
+    "VoidGuard-v0.3.3-Portable.zip",
+    "VoidGuard-v0.3.3-Source.zip",
+    "SHA256SUMS.txt"
+  ],
+  "assets": [
+    {
+      "name": "SHA256SUMS.txt",
+      "size": 192,
+      "digest": "sha256:043e4a4e253b56fd1043b01f69a4295af7ebcfda0a16be9ca2bc248eddc37b62",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.3.3/SHA256SUMS.txt"
+    },
+    {
+      "name": "VoidGuard-v0.3.3-Portable.zip",
+      "size": 67588,
+      "digest": "sha256:6a359761a725ae932b74750955d5d0b9232f706c58ae51e7bcd50cee928bef70",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.3.3/VoidGuard-v0.3.3-Portable.zip"
+    },
+    {
+      "name": "VoidGuard-v0.3.3-Source.zip",
+      "size": 87171,
+      "digest": "sha256:663553ff8cfe40d56f7bac1e929259b26f7201f6daa79849936d22e30f1dd35a",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.3.3/VoidGuard-v0.3.3-Source.zip"
+    }
+  ]
+}
