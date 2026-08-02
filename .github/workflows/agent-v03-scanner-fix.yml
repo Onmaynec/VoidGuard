@@ -1,0 +1,50 @@
+name: Apply v0.3 scanner compatibility fix
+
+on:
+  push:
+    branches:
+      - agent/voidguard-v0.3.0
+    paths:
+      - .github/workflows/agent-v03-scanner-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v5
+        with:
+          ref: agent/voidguard-v0.3.0
+          fetch-depth: 0
+
+      - name: Apply exact compatibility patch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = 'Modules/VoidGuard.Scanner.psm1'
+          $content = Get-Content -LiteralPath $path -Raw -Encoding UTF8
+          $replacements = [ordered]@{
+            'RuleMatches = @($ruleMatches)' = 'RuleMatches = $ruleMatches.ToArray()'
+            'YaraMatches = @($yaraMatches)' = 'YaraMatches = $yaraMatches.ToArray()'
+            'Reasons = @($reasons)' = 'Reasons = $reasons.ToArray()'
+          }
+          foreach ($entry in $replacements.GetEnumerator()) {
+            if (-not $content.Contains($entry.Key)) {
+              throw "Expected scanner text not found: $($entry.Key)"
+            }
+            $content = $content.Replace($entry.Key, $entry.Value)
+          }
+          [IO.File]::WriteAllText((Join-Path $PWD $path), $content, [Text.UTF8Encoding]::new($false))
+          Remove-Item -LiteralPath '.github/workflows/agent-v03-scanner-fix.yml' -Force
+
+      - name: Commit patch and remove helper workflow
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- Modules/VoidGuard.Scanner.psm1 .github/workflows/agent-v03-scanner-fix.yml
+          git commit -m 'fix: use explicit arrays in scanner results'
+          git push origin HEAD:agent/voidguard-v0.3.0
