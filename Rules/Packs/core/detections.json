@@ -1,0 +1,113 @@
+[
+  {
+    "id": "VG-LOL-001",
+    "extensions": [
+      ".ps1",
+      ".cmd",
+      ".bat",
+      ".vbs",
+      ".js",
+      ".jse",
+      ".wsf",
+      ".hta"
+    ],
+    "pattern": "(?i)\\bregsvr32(?:\\.exe)?\\b[^\\r\\n]{0,180}/i:(?:https?|file):",
+    "score": 32,
+    "reason": "Regsvr32 remote or scriptlet execution pattern.",
+    "maxBytes": 1048576
+  },
+  {
+    "id": "VG-LOL-002",
+    "extensions": [
+      ".ps1",
+      ".cmd",
+      ".bat",
+      ".vbs",
+      ".js",
+      ".jse",
+      ".wsf",
+      ".hta"
+    ],
+    "pattern": "(?i)\\brundll32(?:\\.exe)?\\b[^\\r\\n]{0,160}javascript:",
+    "score": 35,
+    "reason": "Rundll32 JavaScript execution pattern.",
+    "maxBytes": 1048576
+  },
+  {
+    "id": "VG-LOL-003",
+    "extensions": [
+      ".ps1",
+      ".cmd",
+      ".bat",
+      ".vbs",
+      ".js",
+      ".jse",
+      ".wsf",
+      ".hta"
+    ],
+    "pattern": "(?i)\\bmshta(?:\\.exe)?\\b[^\\r\\n]{0,180}https?://",
+    "score": 28,
+    "reason": "MSHTA remote content execution pattern.",
+    "maxBytes": 1048576
+  },
+  {
+    "id": "VG-LOL-004",
+    "extensions": [
+      ".ps1",
+      ".cmd",
+      ".bat"
+    ],
+    "pattern": "(?i)\\bcertutil(?:\\.exe)?\\b[^\\r\\n]{0,180}-(?:urlcache|decode|decodehex)\\b",
+    "score": 20,
+    "reason": "Certutil transfer or decoding behavior.",
+    "maxBytes": 1048576
+  },
+  {
+    "id": "VG-LOL-005",
+    "extensions": [
+      ".ps1",
+      ".cmd",
+      ".bat"
+    ],
+    "pattern": "(?i)\\bbitsadmin(?:\\.exe)?\\b[^\\r\\n]{0,180}/transfer\\b",
+    "score": 22,
+    "reason": "BITSAdmin transfer behavior.",
+    "maxBytes": 1048576
+  },
+  {
+    "id": "VG-PERSIST-001",
+    "extensions": [
+      ".ps1",
+      ".cmd",
+      ".bat"
+    ],
+    "pattern": "(?i)\\bschtasks(?:\\.exe)?\\b[^\\r\\n]{0,240}/create\\b[^\\r\\n]{0,240}/sc\\s+(?:onlogon|onstart|minute)\\b",
+    "score": 24,
+    "reason": "Scheduled-task persistence creation pattern.",
+    "maxBytes": 1048576
+  },
+  {
+    "id": "VG-EXEC-001",
+    "extensions": [
+      ".ps1",
+      ".cmd",
+      ".bat"
+    ],
+    "pattern": "(?i)\\bwmic(?:\\.exe)?\\b[^\\r\\n]{0,160}\\bprocess\\b[^\\r\\n]{0,80}\\bcall\\s+create\\b",
+    "score": 24,
+    "reason": "WMI process creation pattern.",
+    "maxBytes": 1048576
+  },
+  {
+    "id": "VG-PS-001",
+    "extensions": [
+      ".ps1",
+      ".cmd",
+      ".bat"
+    ],
+    "pattern": "(?i)\\bpowershell(?:\\.exe)?\\b[^\\r\\n]{0,160}-(?:windowstyle\\s+hidden|w\\s+hidden)\\b",
+    "score": 15,
+    "reason": "Hidden PowerShell execution pattern.",
+    "maxBytes": 1048576
+  }
+]
