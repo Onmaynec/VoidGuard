@@ -147,9 +147,9 @@ function Get-VoidGuardProcessFindings {
         if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
             try {
                 foreach ($connection in Get-NetTCPConnection -State Established -ErrorAction Stop) {
-                    $pid = [int]$connection.OwningProcess
-                    if (-not $networkMap.ContainsKey($pid)) { $networkMap[$pid] = New-Object System.Collections.Generic.List[string] }
-                    $networkMap[$pid].Add("$($connection.RemoteAddress):$($connection.RemotePort)")
+                    $ownerPid = [int]$connection.OwningProcess
+                    if (-not $networkMap.ContainsKey($ownerPid)) { $networkMap[$ownerPid] = New-Object System.Collections.Generic.List[string] }
+                    $networkMap[$ownerPid].Add("$($connection.RemoteAddress):$($connection.RemotePort)")
                 }
             } catch { }
         }
