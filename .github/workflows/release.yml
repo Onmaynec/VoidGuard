@@ -10,6 +10,7 @@ on:
       - VoidGuard.cmd
       - Modules/**
       - Assets/**
+      - Build/**
       - Config/**
       - Rules/**
       - docs/**
@@ -73,24 +74,18 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $dist = Join-Path $PWD 'dist'
-          $portableRoot = Join-Path $dist "VoidGuard-v$env:VERSION"
-          New-Item -ItemType Directory -Path $portableRoot -Force | Out-Null
+          $build = & (Join-Path $PWD 'Build\Build-Release.ps1') `
+            -RootPath $PWD `
+            -OutputDirectory $dist `
+            -Version $env:VERSION
 
-          $include = @(
-            'VoidGuard.ps1', 'VoidGuard.cmd', 'VERSION', 'LICENSE',
-            'README.md', 'CHANGELOG.md', 'SECURITY.md',
-            'Modules', 'Assets', 'Config', 'Rules', 'docs'
-          )
-          foreach ($item in $include) {
-            Copy-Item -LiteralPath (Join-Path $PWD $item) -Destination $portableRoot -Recurse -Force
+          $portableZip = [string]$build.PortableZip
+          $sourceZip = [string]$build.SourceZip
+          foreach ($archive in @($portableZip, $sourceZip)) {
+            if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
+              throw "Release archive was not created: $archive"
+            }
           }
-
-          $portableZip = Join-Path $dist "VoidGuard-v$env:VERSION-Portable.zip"
-          Compress-Archive -Path "$portableRoot\*" -DestinationPath $portableZip -CompressionLevel Optimal
-
-          $sourceZip = Join-Path $dist "VoidGuard-v$env:VERSION-Source.zip"
-          git archive --format=zip --output=$sourceZip HEAD
-          if ($LASTEXITCODE -ne 0) { throw 'git archive failed' }
 
           $sumLines = @()
           foreach ($file in @($portableZip, $sourceZip)) {
