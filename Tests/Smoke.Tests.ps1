@@ -46,7 +46,7 @@ try {
     $statusText = $statusOutput | Out-String
     if ([string]::IsNullOrWhiteSpace($statusText)) { throw 'Status command returned no output.' }
     $status = $statusText | ConvertFrom-Json
-    if (-not $status.PSObject.Properties.Name.Contains('IsAdministrator')) {
+    if ($status.PSObject.Properties.Name -notcontains 'IsAdministrator') {
         throw 'Status output is missing IsAdministrator.'
     }
 } catch {
@@ -83,15 +83,31 @@ $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('VoidGuard-Test-' + [Guid]::Ne
 New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
 try {
     $samplePath = Join-Path $tempRoot 'invoice.pdf.cmd'
-    '@echo off`r`npowershell.exe -WindowStyle Hidden -EncodedCommand AAAA' | Set-Content -LiteralPath $samplePath -Encoding ASCII
+    "@echo off`r`npowershell.exe -WindowStyle Hidden -EncodedCommand AAAA" | Set-Content -LiteralPath $samplePath -Encoding ASCII
     $context = New-VoidGuardContext -RootPath $root -Settings $settings -Professional -NoAnimation
     $finding = Test-VoidGuardFile -Path $samplePath -Context $context -KnownBadHashes @{}
     if (-not $finding -or $finding.Score -lt 20) {
         throw 'Heuristic sample did not cross the expected score.'
     }
+
     $policy = Test-VoidGuardProtectedTarget -Path $samplePath
     if (-not $policy.Allowed) {
         throw 'A normal temporary test file was unexpectedly blocked by policy.'
+    }
+
+    $stream = [IO.File]::Open($samplePath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+    try {
+        $null = @(Get-VoidGuardFileLockOwners -Path $samplePath)
+    } finally {
+        $stream.Dispose()
+    }
+
+    $currentProcess = Get-Process -Id $PID -ErrorAction Stop
+    if ($currentProcess.Path) {
+        $decision = Test-VoidGuardProcessSafeToStop -Id $PID -TargetPath $samplePath
+        if ($decision.Allowed) {
+            throw 'Process safety policy allowed a process whose executable does not match the target.'
+        }
     }
 } finally {
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
