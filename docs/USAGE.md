@@ -1,4 +1,4 @@
-# Использование VoidGuard v0.2.0
+# Использование VoidGuard v0.3.0
 
 ## Интерактивный режим
 
@@ -13,11 +13,7 @@ VoidGuard.cmd
 - `Esc` — назад;
 - `F1` — справка.
 
-Новые разделы:
-
-- `PERSISTENCE MATRIX` — службы, задачи, WMI и обычный автозапуск;
-- `LOCKED FILE / SAFE REMEDIATION` — владельцы блокировки, карантин и удаление при загрузке;
-- `PENDING REMEDIATION LEDGER` — проверка scheduled deletion после перезагрузки.
+Quick Scan и Custom Scan автоматически используют активные rule packs. YARA подключается автоматически, только когда пользователь установил `yara.exe` или указал путь в `Config/settings.json`.
 
 ## Командные режимы
 
@@ -27,6 +23,18 @@ VoidGuard.cmd
 
 # Сканирование файла или папки
 .\VoidGuard.ps1 -Mode CustomScan -Path "C:\Users\User\Downloads"
+
+# Scan + HTML и JSON отчёты
+.\VoidGuard.ps1 -Mode CustomScan `
+  -Path "C:\Users\User\Downloads" `
+  -ReportPath ".\Reports\downloads" `
+  -ReportFormat Both
+
+# Inventory rule packs
+.\VoidGuard.ps1 -Mode RulePacks -Json
+
+# Ручной YARA scan одного файла
+.\VoidGuard.ps1 -Mode Yara -Path "C:\Suspicious\payload.exe" -Json
 
 # Состояние Windows security components
 .\VoidGuard.ps1 -Mode Status -Json
@@ -62,10 +70,42 @@ VoidGuard.cmd
 .\VoidGuard.ps1 -Mode Demo
 ```
 
+## Форматы отчётов
+
+`-ReportPath` доступен для любого режима, который возвращает объект анализа. Расширение можно не указывать:
+
+```powershell
+.\VoidGuard.ps1 -Mode QuickScan `
+  -ReportPath ".\Reports\quick-2026-08-02" `
+  -ReportFormat Both
+```
+
+Будут созданы:
+
+```text
+Reports\quick-2026-08-02.json
+Reports\quick-2026-08-02.html
+```
+
+HTML полностью автономен и не содержит JavaScript или сетевых ресурсов.
+
+## Поля файловой находки v0.3
+
+Кроме пути, SHA-256 и Authenticode результат может содержать:
+
+- `IsPE`;
+- `PEArchitecture`;
+- `PESections`;
+- `PECompileTimeUtc`;
+- `Entropy`;
+- `RuleMatches`;
+- `YaraMatches`;
+- список объяснимых `Reasons`.
+
 ## Remediation workflow
 
-1. Выполните scan и изучите причины оценки.
-2. Проверьте цифровую подпись и SHA-256.
+1. Выполните scan и изучите все причины оценки.
+2. Проверьте цифровую подпись, SHA-256, PE и rule matches.
 3. Используйте `Locks`, чтобы определить владельцев блокировки.
 4. Остановка процесса разрешена только для executable, который точно совпадает с выбранным файлом.
 5. Попробуйте карантин.
@@ -77,6 +117,6 @@ VoidGuard.cmd
 - `LOW` — слабые эвристические признаки;
 - `MEDIUM` — объект требует ручной проверки;
 - `HIGH` — несколько серьёзных признаков;
-- `CRITICAL` — известный вредоносный хеш или очень сильная комбинация признаков.
+- `CRITICAL` — известный вредоносный хеш, YARA evidence или сильная комбинация признаков.
 
-Эвристика может ошибаться. Не выполняйте remediation только из-за одного балла.
+Pattern/YARA match не является разрешением на автоматическое удаление. Всегда проверяйте контекст.
