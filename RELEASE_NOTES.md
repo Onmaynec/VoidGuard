@@ -1,27 +1,33 @@
-# VOIDGUARD v0.2.0 — LOCKDOWN PROTOCOL
+# VOIDGUARD v0.3.0 — SIGNATURE GRID
 
-Вторая публичная версия превращает VoidGuard из базового инспектора в безопасную консоль анализа закрепления и remediation занятых файлов.
+Третья публичная версия добавляет проверяемый rule engine, опциональную YARA-интеграцию, расширенный PE-анализ и автономные отчёты.
 
 ## Главное
 
-- Windows Restart Manager определяет процессы и службы, реально удерживающие файл;
-- точный вредоносный executable можно остановить только после повторной проверки политики и ручного подтверждения;
-- заблокированный файл можно назначить на удаление при следующей загрузке Windows;
-- pending remediation ledger сохраняет путь, SHA-256 и проверяет результат после перезагрузки;
-- новая `PERSISTENCE MATRIX` анализирует Run/RunOnce, Startup folders, Services, Scheduled Tasks и WMI subscriptions;
-- процесс-анализатор показывает command line, parent PID и установленные TCP-соединения;
-- security status теперь показывает exclusions Defender, SmartScreen, proxy и время изменения hosts;
-- обновлено TUI-меню и добавлены новые JSON CLI-режимы.
+- `Rules/Packs` получает manifest-based trust model;
+- каждый файл pack проверяется по SHA-256 до загрузки;
+- внешние packs могут использовать detached RSA-SHA256 подпись и локальный trust store;
+- неподписанные local packs запрещены по умолчанию;
+- встроенный `voidguard.core` содержит defensive regex и YARA rules для LOLBin, persistence и Defender tamper patterns;
+- Quick/Custom Scan автоматически объединяет metadata, Authenticode, PE, entropy, rule-pack и YARA evidence;
+- PE parser показывает архитектуру, число секций и compile timestamp;
+- PE-содержимое с неисполняемым расширением получает отдельный сильный сигнал;
+- HTML/JSON reports создаются полностью офлайн и экранируют данные находок;
+- новые CLI-режимы: `RulePacks`, `Yara`, `-ReportPath`, `-ReportFormat`.
 
-## Защитные ограничения
+## YARA
 
-VoidGuard по-прежнему блокирует Windows/Program Files, WRP, Microsoft-signed, TrustedInstaller, reparse-point и критические процессные цели. Процесс нельзя завершить, если путь его исполняемого файла не совпадает с выбранным объектом.
+YARA CLI не включён в release и не скачивается автоматически. VoidGuard использует только установленный пользователем `yara.exe` или `yara64.exe`. При его отсутствии основной scan engine продолжает работать без ошибки.
+
+## Trust boundary
+
+Rule packs и reports не получают полномочий remediation. Они только добавляют объяснимые evidence к результату. Карантин, process stop и delete-on-reboot по-прежнему проходят отдельные backend policy checks.
 
 ## Запуск
 
-1. Распакуйте `VoidGuard-v0.2.0-Portable.zip`.
-2. Запустите `VoidGuard.cmd`.
-3. Для remediation запустите CMD от администратора.
-4. После scheduled deletion перезагрузите Windows и откройте `PENDING REMEDIATION LEDGER`.
+1. Распакуйте `VoidGuard-v0.3.0-Portable.zip`.
+2. Запустите `VoidGuard.cmd` для обычного TUI.
+3. Посмотрите активные packs: `.\VoidGuard.ps1 -Mode RulePacks -Json`.
+4. Создайте отчёт: `.\VoidGuard.ps1 -Mode QuickScan -ReportPath .\Reports\quick -ReportFormat Both`.
 
 > VoidGuard не заменяет Microsoft Defender, EDR или офлайн-проверку при подозрении на rootkit/PPL/bootkit.
