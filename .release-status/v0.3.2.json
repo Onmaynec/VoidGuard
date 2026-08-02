@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "tag": "v0.3.2",
+  "name": "VOIDGUARD v0.3.2 — СТАБИЛЬНОЕ МЕНЮ",
+  "url": "https://github.com/Onmaynec/VoidGuard/releases/tag/v0.3.2",
+  "draft": false,
+  "prerelease": false,
+  "publishedAt": "2026-08-02T12:29:21Z",
+  "verifiedAtUtc": "2026-08-02T12:29:22.2239760Z",
+  "requiredAssets": [
+    "VoidGuard-v0.3.2-Portable.zip",
+    "VoidGuard-v0.3.2-Source.zip",
+    "SHA256SUMS.txt"
+  ],
+  "assets": [
+    {
+      "name": "SHA256SUMS.txt",
+      "size": 192,
+      "digest": "sha256:fd68164797f9950f99a60f128bb8ee2683c8179f9054dd45e6f7fa956a7ca864",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.3.2/SHA256SUMS.txt"
+    },
+    {
+      "name": "VoidGuard-v0.3.2-Portable.zip",
+      "size": 62564,
+      "digest": "sha256:d218bfe3e80e86c0b62003996b2a7164b2be5393fb164c1a57bca623fa23380a",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.3.2/VoidGuard-v0.3.2-Portable.zip"
+    },
+    {
+      "name": "VoidGuard-v0.3.2-Source.zip",
+      "size": 77453,
+      "digest": "sha256:0615be411ae2c3df096c21447c8a8ce5e4a4e4128ac73efc2256f6c41631f4b0",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.3.2/VoidGuard-v0.3.2-Source.zip"
+    }
+  ]
+}
