@@ -2,6 +2,36 @@
 
 Все заметные изменения VoidGuard документируются здесь.
 
+## [0.3.0] — 2026-08-02
+
+### Добавлено
+
+- manifest-based rule packs с проверкой schema, безопасных путей и SHA-256;
+- режимы доверия `bundled`, `signed` и запрещённый по умолчанию `local`;
+- RSA-SHA256 verification для внешних packs через `Rules/trusted-publishers.json`;
+- встроенный `voidguard.core` с defensive regex и YARA rules;
+- опциональный YARA CLI discovery, timeout и ограничение размера файла;
+- PE parser: architecture, sections, compile timestamp и optional-header metadata;
+- entropy sampling и обнаружение PE-содержимого с неправильным расширением;
+- offline HTML и JSON reports с HTML encoding входных данных;
+- CLI-режимы `RulePacks`, `Yara`, `-ReportPath` и `-ReportFormat`;
+- документация rule-pack format, trust model и reports;
+- smoke-тесты integrity pack, pattern match, PE parser и report escaping.
+
+### Изменено
+
+- Quick/Custom Scan объединяет metadata, Authenticode, PE, entropy, rule-pack и YARA evidence;
+- лимит scan увеличен до 4000 файлов;
+- scan result включает inventory rule packs и статус YARA;
+- release documentation обновлена для `SIGNATURE GRID`.
+
+### Безопасность
+
+- невалидные или недоверенные packs видны в inventory, но не загружаются;
+- YARA и pattern rules не получают полномочий quarantine/remediation;
+- YARA binary не загружается VoidGuard автоматически;
+- HTML reports не содержат JavaScript или сетевых ресурсов.
+
 ## [0.2.0] — 2026-08-02
 
 ### Добавлено
