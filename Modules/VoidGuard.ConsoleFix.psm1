@@ -21,7 +21,7 @@ function Format-VoidGuardMenuLine {
 
 function Get-VoidGuardVisibleBounds {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][string[]]$Lines)
+    param([Parameter(Mandatory)][AllowEmptyString()][string[]]$Lines)
 
     $blank = [char]0x2800
     $left = [int]::MaxValue
