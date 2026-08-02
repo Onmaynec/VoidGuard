@@ -50,17 +50,6 @@ function Repair-VoidGuardPowerShell51Runtime {
                     }
                 }
 
-                # PowerShell разворачивает одноэлементный массив на выходе функции.
-                # Без явного @() свойство Count отсутствует у единственного FileInfo.
-                $patched = $patched.Replace(
-                    '$candidates = Get-VoidGuardScanCandidates -Paths @($resolved) -MaxFiles $maxFiles',
-                    '$candidates = @(Get-VoidGuardScanCandidates -Paths @($resolved) -MaxFiles $maxFiles)'
-                )
-                $patched = $patched.Replace(
-                    '$scanCandidates = Get-VoidGuardScanCandidates -Paths @($paths) -MaxFiles $maxFiles',
-                    '$scanCandidates = @(Get-VoidGuardScanCandidates -Paths @($paths) -MaxFiles $maxFiles)'
-                )
-
                 if ($patched -cne $definition) {
                     $implementation = [scriptblock]::Create($patched)
                     Set-Item -Path ('Function:script:' + $command.Name) -Value $implementation -Force
@@ -68,6 +57,138 @@ function Repair-VoidGuardPowerShell51Runtime {
             }
         }
     }
+}
+
+function Get-VoidGuardScannerModule {
+    $module = Get-Module -Name 'VoidGuard.Scanner' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $module) {
+        throw 'Модуль VoidGuard.Scanner не загружен.'
+    }
+    return $module
+}
+
+function Invoke-VoidGuardPathScan {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)]$Context,
+        [switch]$ShowProgress
+    )
+
+    $scannerModule = Get-VoidGuardScannerModule
+    & $scannerModule {
+        param(
+            [string]$RequestedPath,
+            $ContextObject,
+            [bool]$ProgressEnabled
+        )
+
+        $resolved = Get-VoidGuardCanonicalPath -Path $RequestedPath
+        $started = Get-Date
+        $maxFiles = [int]$ContextObject.Settings.maxFilesPerScan
+        $candidates = @(Get-VoidGuardScanCandidates -Paths @($resolved) -MaxFiles $maxFiles)
+        $knownBad = Get-VoidGuardKnownBadHashes -RootPath $ContextObject.RootPath
+        $ruleEngine = Get-VoidGuardRuleEngineState -Context $ContextObject
+        $findings = New-Object System.Collections.Generic.List[object]
+
+        for ($index = 0; $index -lt $candidates.Count; $index++) {
+            $candidate = $candidates[$index]
+            if ($ProgressEnabled) {
+                $percent = if ($candidates.Count -eq 0) { 100 } else { [int](($index / [double]$candidates.Count) * 100) }
+                Write-Progress -Activity 'VoidGuard file analysis' -Status $candidate.FullName -PercentComplete $percent
+            }
+            try {
+                $finding = Test-VoidGuardFile -Path $candidate.FullName -Context $ContextObject -KnownBadHashes $knownBad -RuleEngine $ruleEngine
+                if ($finding -and $finding.Score -ge [int]$ContextObject.Settings.minimumFindingScore) {
+                    $findings.Add($finding)
+                }
+            } catch {
+            }
+        }
+
+        if ($ProgressEnabled) { Write-Progress -Activity 'VoidGuard file analysis' -Completed }
+        $completed = Get-Date
+        New-VoidGuardScanResult `
+            -Context $ContextObject `
+            -Mode 'Custom' `
+            -Paths @($resolved) `
+            -Started $started `
+            -Completed $completed `
+            -FilesScanned $candidates.Count `
+            -Findings $findings.ToArray() `
+            -RuleEngine $ruleEngine
+    } $Path $Context ([bool]$ShowProgress)
+}
+
+function Invoke-VoidGuardQuickScan {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Context,
+        [switch]$ShowProgress
+    )
+
+    $scannerModule = Get-VoidGuardScannerModule
+    & $scannerModule {
+        param(
+            $ContextObject,
+            [bool]$ProgressEnabled
+        )
+
+        $paths = New-Object System.Collections.Generic.List[string]
+        $candidatesToAdd = New-Object System.Collections.Generic.List[string]
+        foreach ($candidate in @($env:TEMP, $env:APPDATA)) {
+            if (-not [string]::IsNullOrWhiteSpace($candidate)) { $candidatesToAdd.Add($candidate) }
+        }
+        if ($env:USERPROFILE) {
+            $candidatesToAdd.Add((Join-Path $env:USERPROFILE 'Downloads'))
+            $candidatesToAdd.Add((Join-Path $env:USERPROFILE 'Desktop'))
+        }
+        if ($env:APPDATA) {
+            $candidatesToAdd.Add((Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup'))
+        }
+        if ($env:ProgramData) {
+            $candidatesToAdd.Add((Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp'))
+        }
+        foreach ($candidate in $candidatesToAdd) {
+            if ((Test-Path -LiteralPath $candidate) -and -not $paths.Contains($candidate)) {
+                $paths.Add($candidate)
+            }
+        }
+
+        $started = Get-Date
+        $maxFiles = [int]$ContextObject.Settings.maxFilesPerScan
+        $scanCandidates = @(Get-VoidGuardScanCandidates -Paths $paths.ToArray() -MaxFiles $maxFiles)
+        $knownBad = Get-VoidGuardKnownBadHashes -RootPath $ContextObject.RootPath
+        $ruleEngine = Get-VoidGuardRuleEngineState -Context $ContextObject
+        $findings = New-Object System.Collections.Generic.List[object]
+
+        for ($index = 0; $index -lt $scanCandidates.Count; $index++) {
+            $candidate = $scanCandidates[$index]
+            if ($ProgressEnabled) {
+                $percent = if ($scanCandidates.Count -eq 0) { 100 } else { [int](($index / [double]$scanCandidates.Count) * 100) }
+                Write-Progress -Activity 'VoidGuard quick scan' -Status $candidate.FullName -PercentComplete $percent
+            }
+            try {
+                $finding = Test-VoidGuardFile -Path $candidate.FullName -Context $ContextObject -KnownBadHashes $knownBad -RuleEngine $ruleEngine
+                if ($finding -and $finding.Score -ge [int]$ContextObject.Settings.minimumFindingScore) {
+                    $findings.Add($finding)
+                }
+            } catch {
+            }
+        }
+
+        if ($ProgressEnabled) { Write-Progress -Activity 'VoidGuard quick scan' -Completed }
+        $completed = Get-Date
+        New-VoidGuardScanResult `
+            -Context $ContextObject `
+            -Mode 'Quick' `
+            -Paths $paths.ToArray() `
+            -Started $started `
+            -Completed $completed `
+            -FilesScanned $scanCandidates.Count `
+            -Findings $findings.ToArray() `
+            -RuleEngine $ruleEngine
+    } $Context ([bool]$ShowProgress)
 }
 
 function Show-VGLoadingBar {
@@ -117,6 +238,8 @@ function Get-VoidGuardRuntimeHealth {
 Repair-VoidGuardPowerShell51Runtime
 
 Export-ModuleMember -Function @(
+    'Invoke-VoidGuardPathScan',
+    'Invoke-VoidGuardQuickScan',
     'Show-VGLoadingBar',
     'Get-VoidGuardRuntimeHealth'
 )
