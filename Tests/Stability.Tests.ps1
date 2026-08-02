@@ -34,10 +34,10 @@ if ($health.CheckedCommands -lt 10) {
 }
 
 $uiModule = Get-Module -Name 'VoidGuard.UI' -ErrorAction Stop | Select-Object -First 1
-$consoleDefinition = & $uiModule {
-    $item = Get-Item -Path Function:script:Start-VoidGuardConsole -ErrorAction Stop
-    $item.ScriptBlock.ToString()
+$consoleCommand = & $uiModule {
+    Get-Command -Name Start-VoidGuardConsole -CommandType Function -ErrorAction Stop
 }
+$consoleDefinition = $consoleCommand.ScriptBlock.ToString()
 
 foreach ($requiredFragment in @(
     'SYSTEM SELF-TEST',
