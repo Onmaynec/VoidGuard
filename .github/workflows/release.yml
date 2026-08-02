@@ -14,9 +14,14 @@ on:
       - Rules/**
       - docs/**
       - .github/workflows/release.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: voidguard-release
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -24,7 +29,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -88,7 +93,7 @@ jobs:
           }
           $sumLines | Set-Content -LiteralPath (Join-Path $dist 'SHA256SUMS.txt') -Encoding ascii
 
-      - name: Create tag and GitHub Release
+      - name: Ensure tag and GitHub Release
         if: steps.existing.outputs.exists != 'true'
         shell: pwsh
         env:
@@ -96,11 +101,22 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          $ErrorActionPreference = 'Stop'
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git tag -a $env:TAG -m "VoidGuard $env:TAG"
-          git push origin $env:TAG
-          if ($LASTEXITCODE -ne 0) { throw 'Tag push failed' }
+
+          git rev-parse --verify --quiet "refs/tags/$env:TAG" *> $null
+          if ($LASTEXITCODE -ne 0) {
+            git ls-remote --exit-code --tags origin "refs/tags/$env:TAG" *> $null
+            if ($LASTEXITCODE -eq 0) {
+              git fetch origin "refs/tags/$env:TAG:refs/tags/$env:TAG"
+              if ($LASTEXITCODE -ne 0) { throw 'Existing remote tag could not be fetched.' }
+            } else {
+              git tag -a $env:TAG -m "VoidGuard $env:TAG"
+              git push origin $env:TAG
+              if ($LASTEXITCODE -ne 0) { throw 'Tag push failed.' }
+            }
+          }
 
           gh release create $env:TAG `
             "dist/VoidGuard-v$env:VERSION-Portable.zip" `
@@ -110,3 +126,63 @@ jobs:
             --title "VOIDGUARD $env:TAG — Initial Access Denied" `
             --notes-file RELEASE_NOTES.md `
             --latest
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub Release creation failed.' }
+
+      - name: Verify release assets and publish marker
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $releaseJson = gh release view $env:TAG `
+            --repo $env:GITHUB_REPOSITORY `
+            --json tagName,name,isDraft,isPrerelease,publishedAt,url,assets
+          if ($LASTEXITCODE -ne 0) { throw 'Published release could not be read back.' }
+
+          $release = $releaseJson | ConvertFrom-Json
+          $requiredAssets = @(
+            "VoidGuard-v$env:VERSION-Portable.zip",
+            "VoidGuard-v$env:VERSION-Source.zip",
+            'SHA256SUMS.txt'
+          )
+          $assetNames = @($release.assets | ForEach-Object { [string]$_.name })
+          $missingAssets = @($requiredAssets | Where-Object { $_ -notin $assetNames })
+          if ($missingAssets.Count -gt 0) {
+            throw "Release is missing required assets: $($missingAssets -join ', ')"
+          }
+
+          $markerDirectory = Join-Path $PWD '.release-status'
+          New-Item -ItemType Directory -Path $markerDirectory -Force | Out-Null
+          $markerPath = Join-Path $markerDirectory "$env:TAG.json"
+          $marker = [ordered]@{
+            schemaVersion = 1
+            tag = $release.tagName
+            name = $release.name
+            url = $release.url
+            draft = [bool]$release.isDraft
+            prerelease = [bool]$release.isPrerelease
+            publishedAt = $release.publishedAt
+            verifiedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
+            requiredAssets = $requiredAssets
+            assets = @($release.assets | ForEach-Object {
+              [ordered]@{
+                name = $_.name
+                size = $_.size
+                digest = $_.digest
+                url = $_.url
+              }
+            })
+          }
+          $marker | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $markerPath -Encoding UTF8
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- $markerPath
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m "chore: verify release $env:TAG [skip ci]"
+            git push origin HEAD:main
+            if ($LASTEXITCODE -ne 0) { throw 'Release verification marker push failed.' }
+          }
