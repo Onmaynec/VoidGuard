@@ -9,7 +9,7 @@ Import-Module (Join-Path $root 'Modules\VoidGuard.UI.psm1') -Force -DisableNameC
 Import-Module (Join-Path $root 'Modules\VoidGuard.ConsoleFix.psm1') -Force -DisableNameChecking
 
 function Get-TestVisibleBounds {
-    param([Parameter(Mandatory)][string[]]$Lines)
+    param([Parameter(Mandatory)][AllowEmptyString()][string[]]$Lines)
 
     $blank = [char]0x2800
     $left = [int]::MaxValue
