@@ -1,0 +1,7 @@
+Logs/
+Quarantine/
+*.log
+*.tmp
+*.zip
+.DS_Store
+Thumbs.db

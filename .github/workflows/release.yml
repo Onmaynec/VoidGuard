@@ -1,0 +1,112 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - VERSION
+      - RELEASE_NOTES.md
+      - VoidGuard.ps1
+      - VoidGuard.cmd
+      - Modules/**
+      - Assets/**
+      - Config/**
+      - Rules/**
+      - docs/**
+      - .github/workflows/release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content -LiteralPath VERSION -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$') {
+            throw "Invalid VERSION: $version"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+
+      - name: Check existing release
+        id: existing
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh release view $env:TAG --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            'exists=true' >> $env:GITHUB_OUTPUT
+          } else {
+            'exists=false' >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
+      - name: Build release archives
+        if: steps.existing.outputs.exists != 'true'
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = Join-Path $PWD 'dist'
+          $portableRoot = Join-Path $dist "VoidGuard-v$env:VERSION"
+          New-Item -ItemType Directory -Path $portableRoot -Force | Out-Null
+
+          $include = @(
+            'VoidGuard.ps1', 'VoidGuard.cmd', 'VERSION', 'LICENSE',
+            'README.md', 'CHANGELOG.md', 'SECURITY.md',
+            'Modules', 'Assets', 'Config', 'Rules', 'docs'
+          )
+          foreach ($item in $include) {
+            Copy-Item -LiteralPath (Join-Path $PWD $item) -Destination $portableRoot -Recurse -Force
+          }
+
+          $portableZip = Join-Path $dist "VoidGuard-v$env:VERSION-Portable.zip"
+          Compress-Archive -Path "$portableRoot\*" -DestinationPath $portableZip -CompressionLevel Optimal
+
+          $sourceZip = Join-Path $dist "VoidGuard-v$env:VERSION-Source.zip"
+          git archive --format=zip --output=$sourceZip HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'git archive failed' }
+
+          $sumLines = @()
+          foreach ($file in @($portableZip, $sourceZip)) {
+            $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+            $sumLines += "$hash  $([IO.Path]::GetFileName($file))"
+          }
+          $sumLines | Set-Content -LiteralPath (Join-Path $dist 'SHA256SUMS.txt') -Encoding ascii
+
+      - name: Create tag and GitHub Release
+        if: steps.existing.outputs.exists != 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a $env:TAG -m "VoidGuard $env:TAG"
+          git push origin $env:TAG
+          if ($LASTEXITCODE -ne 0) { throw 'Tag push failed' }
+
+          gh release create $env:TAG `
+            "dist/VoidGuard-v$env:VERSION-Portable.zip" `
+            "dist/VoidGuard-v$env:VERSION-Source.zip" `
+            'dist/SHA256SUMS.txt' `
+            --repo $env:GITHUB_REPOSITORY `
+            --title "VOIDGUARD $env:TAG — Initial Access Denied" `
+            --notes-file RELEASE_NOTES.md `
+            --latest
