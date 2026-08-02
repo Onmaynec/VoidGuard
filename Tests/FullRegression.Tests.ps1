@@ -5,6 +5,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $entry = Join-Path $root 'VoidGuard.ps1'
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('VoidGuard-FullRegression-' + [guid]::NewGuid().ToString('N'))
+$failures = New-Object System.Collections.Generic.List[string]
 New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
 
 function Invoke-VGProcessTest {
@@ -27,19 +28,26 @@ function Invoke-VGProcessTest {
 
     $outText = if (Test-Path -LiteralPath $stdout) { Get-Content -LiteralPath $stdout -Raw -Encoding UTF8 } else { '' }
     $errText = if (Test-Path -LiteralPath $stderr) { Get-Content -LiteralPath $stderr -Raw -Encoding UTF8 } else { '' }
+    $problem = $null
 
     if ($process.ExitCode -ne 0) {
-        throw "Режим $Name завершился с кодом $($process.ExitCode). STDOUT:`n$outText`nSTDERR:`n$errText"
-    }
-    if (-not [string]::IsNullOrWhiteSpace($errText)) {
-        throw "Режим $Name записал ошибку в STDERR:`n$errText"
-    }
-    if ($ExpectJson) {
+        $problem = "код $($process.ExitCode); STDOUT:`n$outText`nSTDERR:`n$errText"
+    } elseif (-not [string]::IsNullOrWhiteSpace($errText)) {
+        $problem = "данные в STDERR:`n$errText"
+    } elseif ($ExpectJson) {
         if ([string]::IsNullOrWhiteSpace($outText)) {
-            throw "Режим $Name не вернул JSON."
+            $problem = 'JSON отсутствует.'
+        } else {
+            try { $null = $outText | ConvertFrom-Json -ErrorAction Stop }
+            catch { $problem = "невалидный JSON:`n$outText`n$($_.Exception.Message)" }
         }
-        try { $null = $outText | ConvertFrom-Json -ErrorAction Stop }
-        catch { throw "Режим $Name вернул невалидный JSON:`n$outText`n$($_.Exception.Message)" }
+    }
+
+    if ($problem) {
+        $failures.Add("[$Name] $problem")
+        Write-Host "[FAIL] $Name" -ForegroundColor Red
+        Write-Host $problem -ForegroundColor DarkRed
+        return
     }
 
     Write-Host "[OK] $Name" -ForegroundColor Green
@@ -52,6 +60,7 @@ try {
     New-Item -ItemType Directory -Path $scanDirectory -Force | Out-Null
     'Write-Host safe' | Set-Content -LiteralPath (Join-Path $scanDirectory 'safe.ps1') -Encoding UTF8
 
+    Invoke-VGProcessTest -Name 'SelfTest' -Arguments @('-Mode', 'SelfTest', '-Professional', '-NoAnimation', '-Json') -ExpectJson
     Invoke-VGProcessTest -Name 'Status' -Arguments @('-Mode', 'Status', '-Professional', '-NoAnimation', '-Json') -ExpectJson
     Invoke-VGProcessTest -Name 'Processes' -Arguments @('-Mode', 'Processes', '-Professional', '-NoAnimation', '-Json') -ExpectJson
     Invoke-VGProcessTest -Name 'Persistence' -Arguments @('-Mode', 'Persistence', '-Professional', '-NoAnimation', '-Json') -ExpectJson
@@ -62,6 +71,10 @@ try {
     Invoke-VGProcessTest -Name 'Yara' -Arguments @('-Mode', 'Yara', '-Path', $sample, '-Professional', '-NoAnimation', '-Json') -ExpectJson
     Invoke-VGProcessTest -Name 'RemediateDryRun' -Arguments @('-Mode', 'Remediate', '-Path', $sample, '-Professional', '-NoAnimation', '-Json') -ExpectJson
     Invoke-VGProcessTest -Name 'Demo' -Arguments @('-Mode', 'Demo', '-Professional', '-NoAnimation')
+
+    if ($failures.Count -gt 0) {
+        throw ("Полный регрессионный прогон обнаружил $($failures.Count) ошибок:`n`n" + ($failures -join "`n`n"))
+    }
 
     Write-Host '[OK] Полный безопасный регрессионный прогон завершён.' -ForegroundColor Green
 } finally {
