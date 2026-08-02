@@ -43,9 +43,10 @@ $uiModule = Get-Module | Where-Object {
 if ($null -eq $uiModule) {
     throw 'VoidGuard.UI.psm1 не импортирован.'
 }
-$menuDefinition = & $uiModule {
-    (Get-Item -Path Function:script:Read-VoidGuardMenu).Definition
+$menuCommand = & $uiModule {
+    Get-Command -Name Read-VoidGuardMenu -CommandType Function
 }
+$menuDefinition = $menuCommand.ScriptBlock.ToString()
 if ($menuDefinition -notmatch 'Format-VoidGuardMenuLine') {
     throw 'Исправленная реализация Read-VoidGuardMenu не установлена в области модуля UI.'
 }
