@@ -56,7 +56,8 @@ $moduleOrder = @(
     'VoidGuard.Remediation.psm1',
     'VoidGuard.Quarantine.psm1',
     'VoidGuard.Reporting.psm1',
-    'VoidGuard.UI.psm1'
+    'VoidGuard.UI.psm1',
+    'VoidGuard.ConsoleFix.psm1'
 )
 
 foreach ($moduleName in $moduleOrder) {
