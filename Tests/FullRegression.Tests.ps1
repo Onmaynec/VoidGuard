@@ -4,9 +4,18 @@ $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 $entry = Join-Path $root 'VoidGuard.ps1'
+$settingsPath = Join-Path $root 'Config\settings.json'
+$settingsBackup = [IO.File]::ReadAllBytes($settingsPath)
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('VoidGuard-FullRegression-' + [guid]::NewGuid().ToString('N'))
 $failures = New-Object System.Collections.Generic.List[string]
 New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
+
+function Add-VGFailure {
+    param([Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][string]$Problem)
+    $failures.Add("[$Name] $Problem")
+    Write-Host "[FAIL] $Name" -ForegroundColor Red
+    Write-Host $Problem -ForegroundColor DarkRed
+}
 
 function Invoke-VGProcessTest {
     [CmdletBinding()]
@@ -44,9 +53,7 @@ function Invoke-VGProcessTest {
     }
 
     if ($problem) {
-        $failures.Add("[$Name] $problem")
-        Write-Host "[FAIL] $Name" -ForegroundColor Red
-        Write-Host $problem -ForegroundColor DarkRed
+        Add-VGFailure -Name $Name -Problem $problem
         return
     }
 
@@ -54,6 +61,10 @@ function Invoke-VGProcessTest {
 }
 
 try {
+    $testSettings = Get-Content -LiteralPath $settingsPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $testSettings.maxFilesPerScan = 25
+    $testSettings | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $settingsPath -Encoding UTF8
+
     $sample = Join-Path $tempRoot 'sample.txt'
     'VoidGuard regression sample' | Set-Content -LiteralPath $sample -Encoding UTF8
     $scanDirectory = Join-Path $tempRoot 'scan'
@@ -66,10 +77,20 @@ try {
     Invoke-VGProcessTest -Name 'Persistence' -Arguments @('-Mode', 'Persistence', '-Professional', '-NoAnimation', '-Json') -ExpectJson
     Invoke-VGProcessTest -Name 'Pending' -Arguments @('-Mode', 'Pending', '-Professional', '-NoAnimation', '-Json') -ExpectJson
     Invoke-VGProcessTest -Name 'RulePacks' -Arguments @('-Mode', 'RulePacks', '-Professional', '-NoAnimation', '-Json') -ExpectJson
+    Invoke-VGProcessTest -Name 'QuickScan' -Arguments @('-Mode', 'QuickScan', '-Professional', '-NoAnimation', '-Json') -ExpectJson
     Invoke-VGProcessTest -Name 'CustomScan' -Arguments @('-Mode', 'CustomScan', '-Path', $scanDirectory, '-Professional', '-NoAnimation', '-Json') -ExpectJson
     Invoke-VGProcessTest -Name 'Locks' -Arguments @('-Mode', 'Locks', '-Path', $sample, '-Professional', '-NoAnimation', '-Json') -ExpectJson
     Invoke-VGProcessTest -Name 'Yara' -Arguments @('-Mode', 'Yara', '-Path', $sample, '-Professional', '-NoAnimation', '-Json') -ExpectJson
     Invoke-VGProcessTest -Name 'RemediateDryRun' -Arguments @('-Mode', 'Remediate', '-Path', $sample, '-Professional', '-NoAnimation', '-Json') -ExpectJson
+
+    $reportBase = Join-Path $tempRoot 'reports\custom-scan'
+    Invoke-VGProcessTest -Name 'CustomScanReport' -Arguments @('-Mode', 'CustomScan', '-Path', $scanDirectory, '-Professional', '-NoAnimation', '-ReportPath', $reportBase, '-ReportFormat', 'Both')
+    foreach ($reportPath in @("$reportBase.json", "$reportBase.html")) {
+        if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) {
+            Add-VGFailure -Name 'CustomScanReport' -Problem "Отчёт не создан: $reportPath"
+        }
+    }
+
     Invoke-VGProcessTest -Name 'Demo' -Arguments @('-Mode', 'Demo', '-Professional', '-NoAnimation')
 
     if ($failures.Count -gt 0) {
@@ -78,5 +99,6 @@ try {
 
     Write-Host '[OK] Полный безопасный регрессионный прогон завершён.' -ForegroundColor Green
 } finally {
+    [IO.File]::WriteAllBytes($settingsPath, $settingsBackup)
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
