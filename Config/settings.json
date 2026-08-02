@@ -1,8 +1,11 @@
 {
   "theme": "MatrixGreen",
-  "animationDelayScale": 0.75,
-  "maxFilesPerScan": 2500,
+  "animationDelayScale": 0.65,
+  "maxFilesPerScan": 3500,
   "minimumFindingScore": 20,
+  "minimumPersistenceScore": 18,
+  "maximumDisplayedFindings": 30,
+  "verifyPendingOnStartup": true,
   "showVisualLabels": true,
   "language": "ru-RU"
 }
