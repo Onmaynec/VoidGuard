@@ -2,6 +2,22 @@
 
 Все заметные изменения VoidGuard документируются здесь.
 
+## [0.3.1] — 2026-08-02
+
+### Исправлено
+
+- устранён parser failure `Unexpected token` в `VoidGuard.Animation.psm1` при запуске через Windows PowerShell 5.1;
+- все отслеживаемые PowerShell-файлы нормализованы в UTF-8 с BOM;
+- Portable и Source ZIP повторно нормализуют `.ps1`, `.psm1` и `.psd1` перед упаковкой;
+- Source ZIP собирается единым release builder из отслеживаемых файлов;
+- CI проверяет BOM и реальный запуск репозитория, Portable ZIP и Source ZIP через `powershell.exe` 5.1;
+- PowerShell 7 smoke test сохранён как отдельный этап.
+
+### Причина
+
+- PowerShell 7 распознаёт UTF-8 без BOM, но Windows PowerShell 5.1 использует системную ANSI-кодировку;
+- Unicode tree-символы, кириллица и логотип повреждались до синтаксического разбора.
+
 ## [0.3.0] — 2026-08-02
 
 ### Добавлено
