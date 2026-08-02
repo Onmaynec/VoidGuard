@@ -9,7 +9,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('Interactive', 'QuickScan', 'CustomScan', 'Status', 'Processes', 'Persistence', 'Locks', 'Remediate', 'Pending', 'RulePacks', 'Yara', 'Demo')]
+    [ValidateSet('Interactive', 'QuickScan', 'CustomScan', 'Status', 'Processes', 'Persistence', 'Locks', 'Remediate', 'Pending', 'RulePacks', 'Yara', 'Demo', 'SelfTest')]
     [string]$Mode = 'Interactive',
 
     [string]$Path,
@@ -57,7 +57,8 @@ $moduleOrder = @(
     'VoidGuard.Quarantine.psm1',
     'VoidGuard.Reporting.psm1',
     'VoidGuard.UI.psm1',
-    'VoidGuard.ConsoleFix.psm1'
+    'VoidGuard.ConsoleFix.psm1',
+    'VoidGuard.Stability.psm1'
 )
 
 foreach ($moduleName in $moduleOrder) {
@@ -144,12 +145,24 @@ try {
         'Demo' {
             Show-VoidGuardVisualDemo -RootPath $script:VoidGuardRoot
         }
+        'SelfTest' {
+            Write-ResultOutput (Get-VoidGuardRuntimeHealth)
+        }
     }
 } catch {
     if ($Json) {
-        [pscustomobject]@{ success = $false; error = $_.Exception.Message } | ConvertTo-Json -Depth 5
+        [pscustomobject]@{
+            success = $false
+            error = $_.Exception.Message
+            type = $_.Exception.GetType().FullName
+            position = $_.InvocationInfo.PositionMessage
+            stack = $_.ScriptStackTrace
+        } | ConvertTo-Json -Depth 6
     } else {
         Write-Host "[ERROR] $($_.Exception.Message)" -ForegroundColor Red
+        if ($_.InvocationInfo.PositionMessage) {
+            Write-Host $_.InvocationInfo.PositionMessage -ForegroundColor DarkRed
+        }
     }
     exit 1
 }
