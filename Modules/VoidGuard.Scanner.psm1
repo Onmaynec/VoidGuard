@@ -317,11 +317,11 @@ function Test-VoidGuardFile {
         PESections = $pe.Sections
         PECompileTimeUtc = $pe.CompileTimeUtc
         Entropy = $entropy
-        RuleMatches = @($ruleMatches)
-        YaraMatches = @($yaraMatches)
+        RuleMatches = $ruleMatches.ToArray()
+        YaraMatches = $yaraMatches.ToArray()
         Score = [int]$score
         Risk = Get-VoidGuardRiskLevel -Score $score
-        Reasons = @($reasons)
+        Reasons = $reasons.ToArray()
     }
 }
 
