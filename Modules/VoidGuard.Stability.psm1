@@ -195,8 +195,6 @@ function Show-VGLoadingBar {
     [CmdletBinding()]
     param([string]$Label = 'PROCESSING')
 
-    # Совместимое имя для старого вызова из TUI. Реализация анимации уже
-    # находится в Show-VGProgressSequence.
     Show-VGProgressSequence -Label $Label
 }
 
@@ -235,7 +233,116 @@ function Get-VoidGuardRuntimeHealth {
     }
 }
 
+function Install-VoidGuardSafeConsoleLoop {
+    [CmdletBinding()]
+    param()
+
+    $uiModule = Get-Module -Name 'VoidGuard.UI' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $uiModule) {
+        throw 'Модуль VoidGuard.UI не загружен.'
+    }
+
+    $definition = @'
+[CmdletBinding()]
+param([Parameter(Mandatory)]$Context)
+
+if ($Context.Settings.verifyPendingOnStartup) {
+    try {
+        Get-VoidGuardPendingRemediations -Verify | Out-Null
+    } catch {
+        # Ошибка проверки ledger не должна блокировать запуск интерфейса.
+    }
+}
+
+$menu = @(
+    [pscustomobject]@{ Label = 'QUICK THREAT SCAN'; Action = 'QuickScan' },
+    [pscustomobject]@{ Label = 'SCAN FILE OR DIRECTORY'; Action = 'CustomScan' },
+    [pscustomobject]@{ Label = 'PROCESS ANALYZER'; Action = 'Processes' },
+    [pscustomobject]@{ Label = 'PERSISTENCE MATRIX'; Action = 'Persistence' },
+    [pscustomobject]@{ Label = 'LOCKED FILE / SAFE REMEDIATION'; Action = 'Remediation' },
+    [pscustomobject]@{ Label = 'PENDING REMEDIATION LEDGER'; Action = 'Pending' },
+    [pscustomobject]@{ Label = 'WINDOWS SECURITY STATUS'; Action = 'Status' },
+    [pscustomobject]@{ Label = 'SECURE QUARANTINE'; Action = 'Quarantine' },
+    [pscustomobject]@{ Label = 'SYSTEM SELF-TEST'; Action = 'SelfTest' },
+    [pscustomobject]@{ Label = 'VISUAL EFFECTS DEMO'; Action = 'Demo' },
+    [pscustomobject]@{ Label = 'EXIT'; Action = 'Exit' }
+)
+
+while ($true) {
+    $choice = Read-VoidGuardMenu -Context $Context -Items $menu
+    if (-not $choice -or $choice.Action -eq 'Exit') {
+        Clear-Host
+        Write-Host 'VOIDGUARD OFFLINE // STAY SAFE' -ForegroundColor DarkGreen
+        return
+    }
+
+    try {
+        switch ($choice.Action) {
+            'QuickScan' {
+                Clear-Host
+                Show-VoidGuardHeader -Context $Context
+                Show-VGLoadingBar -Label 'THREAT MATRIX'
+                $Context.LastScan = Invoke-VoidGuardQuickScan -Context $Context -ShowProgress
+                Show-VoidGuardScanSummary -Context $Context -Result $Context.LastScan
+            }
+            'CustomScan' {
+                Clear-Host
+                Show-VoidGuardHeader -Context $Context
+                $path = Read-Host 'Путь к файлу или папке'
+                if (-not [string]::IsNullOrWhiteSpace($path)) {
+                    $Context.LastScan = Invoke-VoidGuardPathScan -Path $path -Context $Context -ShowProgress
+                    Show-VoidGuardScanSummary -Context $Context -Result $Context.LastScan
+                }
+            }
+            'Processes' { Show-VoidGuardProcessScreen -Context $Context }
+            'Persistence' { Show-VoidGuardPersistenceScreen -Context $Context }
+            'Remediation' { Show-VoidGuardRemediationScreen -Context $Context }
+            'Pending' { Show-VoidGuardPendingScreen -Context $Context }
+            'Status' { Show-VoidGuardSecurityScreen -Context $Context }
+            'Quarantine' { Show-VoidGuardQuarantineScreen -Context $Context }
+            'SelfTest' {
+                Clear-Host
+                Show-VoidGuardHeader -Context $Context
+                $health = Get-VoidGuardRuntimeHealth
+                if ($health.Healthy) {
+                    Write-Host '[OK] Все обязательные компоненты загружены.' -ForegroundColor Green
+                } else {
+                    Write-Host '[ERROR] Не загружены обязательные команды:' -ForegroundColor Red
+                    foreach ($commandName in @($health.MissingCommands)) {
+                        Write-Host "  - $commandName" -ForegroundColor Yellow
+                    }
+                }
+                Write-Host "PowerShell: $($health.PowerShell)" -ForegroundColor Cyan
+                Write-Host "Проверено команд: $($health.CheckedCommands)" -ForegroundColor DarkCyan
+                Wait-VoidGuardKey
+            }
+            'Demo' {
+                Show-VoidGuardVisualDemo -RootPath $Context.RootPath
+                Wait-VoidGuardKey
+            }
+        }
+    } catch {
+        Clear-Host
+        Show-VoidGuardHeader -Context $Context
+        Write-Host '[ERROR] Операция завершилась ошибкой, но VoidGuard продолжает работу.' -ForegroundColor Red
+        Write-Host $_.Exception.Message -ForegroundColor Yellow
+        if ($_.InvocationInfo.PositionMessage) {
+            Write-Host $_.InvocationInfo.PositionMessage -ForegroundColor DarkRed
+        }
+        Wait-VoidGuardKey
+    }
+}
+'@
+
+    & $uiModule {
+        param([string]$FunctionDefinition)
+        $implementation = [scriptblock]::Create($FunctionDefinition)
+        Set-Item -Path Function:script:Start-VoidGuardConsole -Value $implementation -Force
+    } $definition
+}
+
 Repair-VoidGuardPowerShell51Runtime
+Install-VoidGuardSafeConsoleLoop
 
 Export-ModuleMember -Function @(
     'Invoke-VoidGuardPathScan',
