@@ -1,0 +1,8 @@
+{
+  "theme": "MatrixGreen",
+  "animationDelayScale": 0.75,
+  "maxFilesPerScan": 2500,
+  "minimumFindingScore": 20,
+  "showVisualLabels": true,
+  "language": "ru-RU"
+}
