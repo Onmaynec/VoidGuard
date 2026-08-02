@@ -20,6 +20,14 @@ jobs:
         shell: pwsh
         run: ./Tests/Smoke.Tests.ps1
 
+      - name: Run PowerShell 7 console regression tests
+        shell: pwsh
+        run: ./Tests/ConsoleFix.Tests.ps1
+
       - name: Run Windows PowerShell 5.1 package compatibility tests
         shell: powershell
         run: ./Tests/PackageCompatibility.Tests.ps1
+
+      - name: Run Windows PowerShell 5.1 console regression tests
+        shell: powershell
+        run: ./Tests/ConsoleFix.Tests.ps1
