@@ -7,9 +7,9 @@
     persistence, Windows security state, trusted rule packs, optional YARA,
     offline reports, and locked-file remediation.
 #>
-[CmdletBinding()]
+[CmdletBinding(SupportsShouldProcess)]
 param(
-    [ValidateSet('Interactive', 'QuickScan', 'CustomScan', 'Status', 'Processes', 'Persistence', 'Locks', 'Remediate', 'Pending', 'RulePacks', 'Yara', 'Demo', 'SelfTest')]
+    [ValidateSet('Interactive', 'QuickScan', 'CustomScan', 'Status', 'Processes', 'Persistence', 'Locks', 'Remediate', 'Pending', 'RulePacks', 'Yara', 'Demo', 'SelfTest', 'BaselineCreate', 'BaselineDiff', 'DefenderOffline')]
     [string]$Mode = 'Interactive',
 
     [string]$Path,
@@ -21,6 +21,17 @@ param(
     [switch]$ScheduleOnReboot,
 
     [switch]$Confirmed,
+
+    [string]$BaselinePath,
+
+    [string[]]$IntegrityPaths = @(),
+
+    [ValidateSet('Security', 'Services', 'Tasks', 'Startup', 'Files')]
+    [string[]]$IntegritySections = @('Security', 'Services', 'Tasks', 'Startup', 'Files'),
+
+    [switch]$NoHosts,
+
+    [switch]$RebootAcknowledged,
 
     [string]$ReportPath,
 
@@ -55,6 +66,9 @@ $moduleOrder = @(
     'VoidGuard.Persistence.psm1',
     'VoidGuard.Remediation.psm1',
     'VoidGuard.Quarantine.psm1',
+    'VoidGuard.IntegritySnapshot.psm1',
+    'VoidGuard.IntegrityBaseline.psm1',
+    'VoidGuard.DefenderOffline.psm1',
     'VoidGuard.Reporting.psm1',
     'VoidGuard.UI.psm1',
     'VoidGuard.ConsoleFix.psm1',
@@ -153,6 +167,20 @@ try {
             if ([string]::IsNullOrWhiteSpace($Path)) { throw 'Yara requires -Path.' }
             $engine = Get-VoidGuardRuleEngineState -Context $context
             Write-ResultOutput (Invoke-VoidGuardYaraScan -Path $Path -Context $context -RuleFiles $engine.YaraRuleFiles)
+        }
+        'BaselineCreate' {
+            Write-ResultOutput (New-VGIntegrityBaseline -BaselinePath $BaselinePath -SelectedPaths $IntegrityPaths -Sections $IntegritySections -IncludeHosts:(-not $NoHosts))
+        }
+        'BaselineDiff' {
+            if ([string]::IsNullOrWhiteSpace($BaselinePath)) { throw 'BaselineDiff requires -BaselinePath.' }
+            Write-ResultOutput (Compare-VGIntegrityBaseline -BaselinePath $BaselinePath)
+        }
+        'DefenderOffline' {
+            if ($Confirmed -or $RebootAcknowledged -or $WhatIfPreference) {
+                Write-ResultOutput (Invoke-VGDefenderOffline -Confirmed:$Confirmed -RebootAcknowledged:$RebootAcknowledged -WhatIf:$WhatIfPreference)
+            } else {
+                Write-ResultOutput (Get-VGDefenderOfflineReadiness)
+            }
         }
         'Demo' {
             Show-VoidGuardVisualDemo -RootPath $script:VoidGuardRoot
