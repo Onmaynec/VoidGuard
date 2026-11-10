@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "tag": "v0.5.0",
+  "name": "VOIDGUARD v0.5.0 — THREAT INTELLIGENCE",
+  "url": "https://github.com/Onmaynec/VoidGuard/releases/tag/v0.5.0",
+  "draft": false,
+  "prerelease": false,
+  "publishedAt": "2026-11-10T12:31:26Z",
+  "verifiedAtUtc": "2026-11-10T12:31:28.2612233Z",
+  "requiredAssets": [
+    "VoidGuard-v0.5.0-Portable.zip",
+    "VoidGuard-v0.5.0-Source.zip",
+    "SHA256SUMS.txt"
+  ],
+  "assets": [
+    {
+      "name": "SHA256SUMS.txt",
+      "size": 192,
+      "digest": "sha256:dc13d9a92329a58012645e957039462cca15cb0a17d0f322a26422ce19b61914",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.5.0/SHA256SUMS.txt"
+    },
+    {
+      "name": "VoidGuard-v0.5.0-Portable.zip",
+      "size": 105723,
+      "digest": "sha256:d0655d88650b8a871d7e14d3bef630a603d876d857d744358a5e71a6c0d4e7c1",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.5.0/VoidGuard-v0.5.0-Portable.zip"
+    },
+    {
+      "name": "VoidGuard-v0.5.0-Source.zip",
+      "size": 141631,
+      "digest": "sha256:ebd725aef82b01d86807197d227cb392ca52f8bff2d855ed124f94c7942d1f28",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.5.0/VoidGuard-v0.5.0-Source.zip"
+    }
+  ]
+}
