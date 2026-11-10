@@ -122,6 +122,11 @@ try {
         throw 'Invalid RSA signature was accepted.'
     }
 
+    $uncPreview=Get-VGRuleUpdatePreview -SourcePath '\\example.invalid\share\pack' -Context $ctx
+    if ($uncPreview.CanApply -or $uncPreview.Status -ne 'BLOCKED') {
+        throw 'UNC/network source path was accepted.'
+    }
+
     $coreDenied=$false
     try { $null=Assert-VGRuleUpdateId 'voidguard.core' } catch { $coreDenied=$true }
     if (-not $coreDenied) { throw 'Bundled core was not protected.' }

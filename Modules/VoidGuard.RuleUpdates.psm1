@@ -12,6 +12,9 @@ function Assert-VGRuleUpdateId {
 function Assert-VGRuleUpdatePath {
     param([Parameter(Mandatory)][string]$Path)
     $full = [IO.Path]::GetFullPath($Path)
+    if ($full -notmatch '^[a-zA-Z]:\\' -or $full -match '^\\') {
+        throw 'Rule updates and history require local Windows drive paths. UNC/network paths are blocked.'
+    }
     if (Get-VoidGuardPathReparseAncestor -Path $full) { throw "Reparse point in update path: $full" }
     return $full
 }
