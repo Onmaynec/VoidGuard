@@ -80,6 +80,22 @@ jobs:
         shell: powershell
         run: ./Tests/SystemIntegrity.Tests.ps1
 
+      - name: Run PowerShell 7 signed rule update tests
+        shell: pwsh
+        run: ./Tests/RuleUpdates.Tests.ps1
+
+      - name: Run Windows PowerShell 5.1 signed rule update tests
+        shell: powershell
+        run: ./Tests/RuleUpdates.Tests.ps1
+
+      - name: Run PowerShell 7 incident bundle tests
+        shell: pwsh
+        run: ./Tests/IncidentBundle.Tests.ps1
+
+      - name: Run Windows PowerShell 5.1 incident bundle tests
+        shell: powershell
+        run: ./Tests/IncidentBundle.Tests.ps1
+
       - name: Run Windows PowerShell 5.1 full mode regression tests
         shell: powershell
         run: ./Tests/FullRegression.Tests.ps1

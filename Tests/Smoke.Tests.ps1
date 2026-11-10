@@ -37,7 +37,9 @@ $requiredFiles = @(
     'Modules\VoidGuard.Reporting.psm1',
     'Modules\VoidGuard.IntegritySnapshot.psm1',
     'Modules\VoidGuard.IntegrityBaseline.psm1',
-    'Modules\VoidGuard.DefenderOffline.psm1'
+    'Modules\VoidGuard.DefenderOffline.psm1',
+    'Modules\VoidGuard.RuleUpdates.psm1',
+    'Modules\VoidGuard.IncidentBundle.psm1'
 )
 foreach ($relative in $requiredFiles) {
     if (-not (Test-Path -LiteralPath (Join-Path $root $relative))) { throw "Required file is missing: $relative" }
@@ -74,6 +76,8 @@ $moduleOrder = @(
     'VoidGuard.IntegritySnapshot.psm1',
     'VoidGuard.IntegrityBaseline.psm1',
     'VoidGuard.DefenderOffline.psm1',
+    'VoidGuard.RuleUpdates.psm1',
+    'VoidGuard.IncidentBundle.psm1',
     'VoidGuard.UI.psm1'
 )
 foreach ($moduleName in $moduleOrder) {
@@ -90,7 +94,9 @@ foreach ($commandName in @(
     'Get-VoidGuardRuleEngineState',
     'Get-VoidGuardYaraStatus',
     'Get-VoidGuardPeInfo',
-    'Export-VoidGuardReportBundle'
+    'Export-VoidGuardReportBundle',
+    'Get-VGRuleUpdatePreview',
+    'Export-VGIncidentBundle'
 )) {
     if (-not (Get-Command $commandName -ErrorAction SilentlyContinue)) { throw "Exported command is missing: $commandName" }
 }
@@ -174,4 +180,4 @@ try {
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host 'VoidGuard v0.3 smoke tests passed.' -ForegroundColor Green
+Write-Host 'VoidGuard smoke tests passed.' -ForegroundColor Green
