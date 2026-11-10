@@ -34,7 +34,10 @@ $requiredFiles = @(
     'Modules\VoidGuard.Persistence.psm1',
     'Modules\VoidGuard.Remediation.psm1',
     'Modules\VoidGuard.RulePacks.psm1',
-    'Modules\VoidGuard.Reporting.psm1'
+    'Modules\VoidGuard.Reporting.psm1',
+    'Modules\VoidGuard.IntegritySnapshot.psm1',
+    'Modules\VoidGuard.IntegrityBaseline.psm1',
+    'Modules\VoidGuard.DefenderOffline.psm1'
 )
 foreach ($relative in $requiredFiles) {
     if (-not (Test-Path -LiteralPath (Join-Path $root $relative))) { throw "Required file is missing: $relative" }
@@ -68,6 +71,9 @@ $moduleOrder = @(
     'VoidGuard.Remediation.psm1',
     'VoidGuard.Quarantine.psm1',
     'VoidGuard.Reporting.psm1',
+    'VoidGuard.IntegritySnapshot.psm1',
+    'VoidGuard.IntegrityBaseline.psm1',
+    'VoidGuard.DefenderOffline.psm1',
     'VoidGuard.UI.psm1'
 )
 foreach ($moduleName in $moduleOrder) {
