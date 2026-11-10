@@ -336,31 +336,44 @@ function Get-VoidGuardScanCandidates {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string[]]$Paths,
-        [int]$MaxFiles = 2500
+        [int]$MaxFiles = 2500,
+        [ref]$Diagnostics
     )
 
     $seen = @{}
-    $files = New-Object System.Collections.Generic.List[object]
+    $files = New-Object 'System.Collections.Generic.List[object]'
+    $walkErrors = @()
     foreach ($scanPath in $Paths) {
         if ([string]::IsNullOrWhiteSpace($scanPath) -or -not (Test-Path -LiteralPath $scanPath)) { continue }
-        $target = Get-Item -LiteralPath $scanPath -Force -ErrorAction SilentlyContinue
+        $target = Get-Item -LiteralPath $scanPath -Force -ErrorAction SilentlyContinue -ErrorVariable +walkErrors
         if (-not $target) { continue }
 
         if (-not $target.PSIsContainer) {
-            if (-not $seen.ContainsKey($target.FullName)) { $files.Add($target); $seen[$target.FullName] = $true }
+            if (-not $seen.ContainsKey($target.FullName) -and $files.Count -lt $MaxFiles) {
+                $files.Add($target)
+                $seen[$target.FullName] = $true
+            }
             continue
         }
 
-        Get-ChildItem -LiteralPath $target.FullName -File -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
-            if ($files.Count -ge $MaxFiles) { return }
-            if ((Test-VoidGuardScanCandidate -Item $_) -and -not $seen.ContainsKey($_.FullName)) {
-                $files.Add($_)
-                $seen[$_.FullName] = $true
+        Get-ChildItem -LiteralPath $target.FullName -File -Recurse -Force -ErrorAction SilentlyContinue -ErrorVariable +walkErrors |
+            ForEach-Object {
+                if ($files.Count -lt $MaxFiles -and (Test-VoidGuardScanCandidate -Item $_) -and -not $seen.ContainsKey($_.FullName)) {
+                    $files.Add($_)
+                    $seen[$_.FullName] = $true
+                }
             }
-        }
         if ($files.Count -ge $MaxFiles) { break }
     }
-    return @($files)
+
+    if ($null -ne $Diagnostics) {
+        $Diagnostics.Value = [pscustomobject]@{
+            EnumerationErrors = @($walkErrors | Select-Object -First 50 | ForEach-Object { $_.Exception.Message })
+            EnumerationErrorCount = @($walkErrors).Count
+            LimitReached = ($files.Count -ge $MaxFiles)
+        }
+    }
+    return $files.ToArray()
 }
 
 function New-VoidGuardScanResult {
@@ -370,11 +383,17 @@ function New-VoidGuardScanResult {
         [Parameter(Mandatory)][string[]]$Paths,
         [Parameter(Mandatory)]$Started,
         [Parameter(Mandatory)]$Completed,
+        [Parameter(Mandatory)][int]$FilesDiscovered,
         [Parameter(Mandatory)][int]$FilesScanned,
+        [Parameter(Mandatory)][int]$FilesSkipped,
+        [Parameter(Mandatory)][int]$FilesFailed,
+        [Parameter(Mandatory)][object[]]$FileErrors,
+        [Parameter(Mandatory)]$Diagnostics,
         [Parameter(Mandatory)][object[]]$Findings,
         [Parameter(Mandatory)]$RuleEngine
     )
 
+    $partial = ($FilesFailed -gt 0) -or ($Diagnostics.EnumerationErrorCount -gt 0) -or $Diagnostics.LimitReached
     return [pscustomobject]@{
         Version = $Context.Version
         Mode = $Mode
@@ -382,11 +401,70 @@ function New-VoidGuardScanResult {
         StartedUtc = $Started.ToUniversalTime()
         CompletedUtc = $Completed.ToUniversalTime()
         Duration = ($Completed - $Started).ToString()
+        ScanStatus = if ($partial) { 'PARTIAL' } else { 'COMPLETE' }
+        Complete = (-not $partial)
+        FilesDiscovered = $FilesDiscovered
         FilesScanned = $FilesScanned
+        FilesSkipped = $FilesSkipped
+        FilesFailed = $FilesFailed
+        FileErrors = @($FileErrors)
+        EnumerationErrorCount = $Diagnostics.EnumerationErrorCount
+        EnumerationErrors = @($Diagnostics.EnumerationErrors)
+        ScanLimitReached = [bool]$Diagnostics.LimitReached
         Findings = @($Findings | Sort-Object Score -Descending)
         RulePacks = @($RuleEngine.Inventory | Select-Object Id, Name, Version, Enabled, Trusted, IntegrityValid, TrustReason, Errors)
         Yara = $RuleEngine.Yara
     }
+}
+
+function Invoke-VoidGuardScanCore {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string[]]$Paths,
+        [Parameter(Mandatory)][string]$Mode,
+        [Parameter(Mandatory)]$Context,
+        [switch]$ShowProgress
+    )
+
+    $started = Get-Date
+    $diagnostics = $null
+    $maxFiles = [Math]::Max(1, [int]$Context.Settings.maxFilesPerScan)
+    $candidates = @(Get-VoidGuardScanCandidates -Paths $Paths -MaxFiles $maxFiles -Diagnostics ([ref]$diagnostics))
+    $knownBad = Get-VoidGuardKnownBadHashes -RootPath $Context.RootPath
+    $ruleEngine = Get-VoidGuardRuleEngineState -Context $Context
+    $findings = New-Object 'System.Collections.Generic.List[object]'
+    $failures = New-Object 'System.Collections.Generic.List[object]'
+    $scanned = 0
+    $skipped = 0
+    $failed = 0
+
+    for ($index = 0; $index -lt $candidates.Count; $index++) {
+        $candidate = $candidates[$index]
+        if ($ShowProgress) {
+            $percent = [int](($index / [double][Math]::Max(1, $candidates.Count)) * 100)
+            Write-Progress -Activity 'VoidGuard file analysis' -Status $candidate.FullName -PercentComplete $percent
+        }
+        try {
+            $finding = Test-VoidGuardFile -Path $candidate.FullName -Context $Context -KnownBadHashes $knownBad -RuleEngine $ruleEngine
+            if ($null -eq $finding) {
+                $skipped++
+                continue
+            }
+            $scanned++
+            if ($finding.Score -ge [int]$Context.Settings.minimumFindingScore) { $findings.Add($finding) }
+        } catch {
+            $failed++
+            if ($failures.Count -lt 100) {
+                $failures.Add([pscustomobject]@{
+                    Path = $candidate.FullName
+                    Error = $_.Exception.Message
+                })
+            }
+        }
+    }
+    if ($ShowProgress) { Write-Progress -Activity 'VoidGuard file analysis' -Completed }
+
+    return New-VoidGuardScanResult -Context $Context -Mode $Mode -Paths $Paths -Started $started -Completed (Get-Date) -FilesDiscovered $candidates.Count -FilesScanned $scanned -FilesSkipped $skipped -FilesFailed $failed -FileErrors $failures.ToArray() -Diagnostics $diagnostics -Findings $findings.ToArray() -RuleEngine $ruleEngine
 }
 
 function Invoke-VoidGuardPathScan {
@@ -398,28 +476,7 @@ function Invoke-VoidGuardPathScan {
     )
 
     $resolved = Get-VoidGuardCanonicalPath -Path $Path
-    $started = Get-Date
-    $maxFiles = [int]$Context.Settings.maxFilesPerScan
-    $candidates = Get-VoidGuardScanCandidates -Paths @($resolved) -MaxFiles $maxFiles
-    $knownBad = Get-VoidGuardKnownBadHashes -RootPath $Context.RootPath
-    $ruleEngine = Get-VoidGuardRuleEngineState -Context $Context
-    $findings = New-Object System.Collections.Generic.List[object]
-
-    for ($index = 0; $index -lt $candidates.Count; $index++) {
-        $candidate = $candidates[$index]
-        if ($ShowProgress) {
-            $percent = if ($candidates.Count -eq 0) { 100 } else { [int](($index / [double]$candidates.Count) * 100) }
-            Write-Progress -Activity 'VoidGuard file analysis' -Status $candidate.FullName -PercentComplete $percent
-        }
-        try {
-            $finding = Test-VoidGuardFile -Path $candidate.FullName -Context $Context -KnownBadHashes $knownBad -RuleEngine $ruleEngine
-            if ($finding -and $finding.Score -ge [int]$Context.Settings.minimumFindingScore) { $findings.Add($finding) }
-        } catch {
-        }
-    }
-    if ($ShowProgress) { Write-Progress -Activity 'VoidGuard file analysis' -Completed }
-    $completed = Get-Date
-    return New-VoidGuardScanResult -Context $Context -Mode 'Custom' -Paths @($resolved) -Started $started -Completed $completed -FilesScanned $candidates.Count -Findings @($findings) -RuleEngine $ruleEngine
+    return Invoke-VoidGuardScanCore -Paths @($resolved) -Mode 'Custom' -Context $Context -ShowProgress:$ShowProgress
 }
 
 function Invoke-VoidGuardQuickScan {
@@ -429,43 +486,28 @@ function Invoke-VoidGuardQuickScan {
         [switch]$ShowProgress
     )
 
-    $paths = New-Object System.Collections.Generic.List[string]
-    $candidatesToAdd = New-Object System.Collections.Generic.List[string]
+    $paths = New-Object 'System.Collections.Generic.List[string]'
     foreach ($candidate in @($env:TEMP, $env:APPDATA)) {
-        if (-not [string]::IsNullOrWhiteSpace($candidate)) { $candidatesToAdd.Add($candidate) }
+        if (-not [string]::IsNullOrWhiteSpace($candidate)) { $paths.Add($candidate) }
     }
     if ($env:USERPROFILE) {
-        $candidatesToAdd.Add((Join-Path $env:USERPROFILE 'Downloads'))
-        $candidatesToAdd.Add((Join-Path $env:USERPROFILE 'Desktop'))
+        $paths.Add((Join-Path $env:USERPROFILE 'Downloads'))
+        $paths.Add((Join-Path $env:USERPROFILE 'Desktop'))
     }
-    if ($env:APPDATA) { $candidatesToAdd.Add((Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup')) }
-    if ($env:ProgramData) { $candidatesToAdd.Add((Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp')) }
-    foreach ($candidate in $candidatesToAdd) {
-        if ((Test-Path -LiteralPath $candidate) -and -not $paths.Contains($candidate)) { $paths.Add($candidate) }
+    if ($env:APPDATA) {
+        $paths.Add((Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup'))
+    }
+    if ($env:ProgramData) {
+        $paths.Add((Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp'))
     }
 
-    $started = Get-Date
-    $maxFiles = [int]$Context.Settings.maxFilesPerScan
-    $scanCandidates = Get-VoidGuardScanCandidates -Paths @($paths) -MaxFiles $maxFiles
-    $knownBad = Get-VoidGuardKnownBadHashes -RootPath $Context.RootPath
-    $ruleEngine = Get-VoidGuardRuleEngineState -Context $Context
-    $findings = New-Object System.Collections.Generic.List[object]
-
-    for ($index = 0; $index -lt $scanCandidates.Count; $index++) {
-        $candidate = $scanCandidates[$index]
-        if ($ShowProgress) {
-            $percent = if ($scanCandidates.Count -eq 0) { 100 } else { [int](($index / [double]$scanCandidates.Count) * 100) }
-            Write-Progress -Activity 'VoidGuard quick scan' -Status $candidate.FullName -PercentComplete $percent
-        }
-        try {
-            $finding = Test-VoidGuardFile -Path $candidate.FullName -Context $Context -KnownBadHashes $knownBad -RuleEngine $ruleEngine
-            if ($finding -and $finding.Score -ge [int]$Context.Settings.minimumFindingScore) { $findings.Add($finding) }
-        } catch {
+    $existing = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($candidate in $paths.ToArray()) {
+        if ((Test-Path -LiteralPath $candidate) -and -not $existing.Contains($candidate)) {
+            $existing.Add($candidate)
         }
     }
-    if ($ShowProgress) { Write-Progress -Activity 'VoidGuard quick scan' -Completed }
-    $completed = Get-Date
-    return New-VoidGuardScanResult -Context $Context -Mode 'Quick' -Paths @($paths) -Started $started -Completed $completed -FilesScanned $scanCandidates.Count -Findings @($findings) -RuleEngine $ruleEngine
+    return Invoke-VoidGuardScanCore -Paths $existing.ToArray() -Mode 'Quick' -Context $Context -ShowProgress:$ShowProgress
 }
 
 Export-ModuleMember -Function @(
