@@ -74,24 +74,39 @@ function Invoke-VoidGuardQuarantine {
     }
 
     $item = Get-Item -LiteralPath $policy.CanonicalPath -Force -ErrorAction Stop
-    $hash = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256 -ErrorAction Stop).Hash
+    $lastPolicy = Test-VoidGuardProtectedTarget -Path $item.FullName
+    if (-not $lastPolicy.Allowed -or (Get-VoidGuardPathReparseAncestor -Path $item.FullName)) {
+        return [pscustomobject]@{
+            Success = $false; Status = 'BLOCKED_SYSTEM_POLICY'; Path = $item.FullName
+            Reasons = $lastPolicy.Reasons; Warnings = $lastPolicy.Warnings
+        }
+    }
+    if (-not $PSCmdlet.ShouldProcess($item.FullName, 'Move file into VoidGuard quarantine')) {
+        return [pscustomobject]@{ Success = $false; Status = 'DRY_RUN'; Path = $item.FullName }
+    }
+
     $id = 'Q-{0}-{1}' -f (Get-Date -Format 'yyyyMMddHHmmss'), ([Guid]::NewGuid().ToString('N').Substring(0, 8).ToUpperInvariant())
-    $container = Join-Path (Get-VoidGuardQuarantineRoot) $id
-    New-Item -ItemType Directory -Path $container -Force | Out-Null
+    $root = Get-VoidGuardQuarantineRoot
+    if (Get-VoidGuardPathReparseAncestor -Path $root) {
+        return [pscustomobject]@{ Success = $false; Status = 'BLOCKED_SYSTEM_POLICY'; Path = $item.FullName; Reasons = @('Quarantine vault path contains a reparse point.') }
+    }
+    $container = Join-Path $root $id
+    New-Item -ItemType Directory -Path $container -Force -ErrorAction Stop | Out-Null
 
     $payloadPath = Join-Path $container 'payload.vgq'
     $metadataPath = Join-Path $container 'metadata.json'
-    if ($PSCmdlet.ShouldProcess($item.FullName, 'Move file into VoidGuard quarantine')) {
-        try {
-            Move-Item -LiteralPath $item.FullName -Destination $payloadPath -Force -ErrorAction Stop
-        } catch {
-            Remove-Item -LiteralPath $container -Recurse -Force -ErrorAction SilentlyContinue
-            return [pscustomobject]@{
-                Success = $false; Status = 'MOVE_FAILED'; Path = $item.FullName
-                Reasons = @($_.Exception.Message); Warnings = $policy.Warnings
-            }
+    try {
+        Move-Item -LiteralPath $item.FullName -Destination $payloadPath -ErrorAction Stop
+    } catch {
+        Remove-Item -LiteralPath $container -Recurse -Force -ErrorAction SilentlyContinue
+        return [pscustomobject]@{
+            Success = $false; Status = 'MOVE_FAILED'; Path = $item.FullName
+            Reasons = @($_.Exception.Message); Warnings = $policy.Warnings
         }
     }
+    # Фиксируем содержимое уже внутри vault: исходный файл мог измениться до перемещения.
+    $quarantinedItem = Get-Item -LiteralPath $payloadPath -Force -ErrorAction Stop
+    $hash = (Get-FileHash -LiteralPath $payloadPath -Algorithm SHA256 -ErrorAction Stop).Hash
 
     $metadata = [ordered]@{
         SchemaVersion   = 2
@@ -99,13 +114,28 @@ function Invoke-VoidGuardQuarantine {
         OriginalPath    = $item.FullName
         PayloadPath     = $payloadPath
         OriginalName    = $item.Name
-        Size            = [long]$item.Length
+        Size            = [long]$quarantinedItem.Length
         SHA256          = $hash
         QuarantinedUtc  = (Get-Date).ToUniversalTime()
         Restorable      = $true
         PolicyWarnings  = @($policy.Warnings)
     }
-    $metadata | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
+    try {
+        $metadata | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $metadataPath -Encoding UTF8 -ErrorAction Stop
+    } catch {
+        $writeError = $_.Exception.Message
+        try {
+            # Не перезаписываем возможный новый файл по исходному пути.
+            Move-Item -LiteralPath $payloadPath -Destination $item.FullName -ErrorAction Stop
+            Remove-Item -LiteralPath $container -Recurse -Force -ErrorAction SilentlyContinue
+            return [pscustomobject]@{ Success = $false; Status = 'METADATA_FAILED_ROLLED_BACK'; Path = $item.FullName; Reasons = @($writeError) }
+        } catch {
+            return [pscustomobject]@{
+                Success = $false; Status = 'METADATA_FAILED_RETAINED'; Path = $item.FullName; Vault = $container
+                Reasons = @($writeError, $_.Exception.Message)
+            }
+        }
+    }
 
     if (Test-VoidGuardWindows) {
         try {
