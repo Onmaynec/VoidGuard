@@ -474,6 +474,126 @@ function Show-VGDefenderOfflineScreen {
     Wait-VoidGuardKey
 }
 
+function Show-VGRuleIntelligenceScreen {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Context)
+    $menu=@(
+        [pscustomobject]@{Label='INSTALLED RULE PACKS';Action='Inventory'},
+        [pscustomobject]@{Label='PREVIEW SIGNED UPDATE';Action='Preview'},
+        [pscustomobject]@{Label='INSTALL SIGNED UPDATE';Action='Install'},
+        [pscustomobject]@{Label='VERSION HISTORY';Action='History'},
+        [pscustomobject]@{Label='ROLL BACK SIGNED PACK';Action='Rollback'},
+        [pscustomobject]@{Label='ENABLE / DISABLE PACK';Action='Activation'},
+        [pscustomobject]@{Label='BACK';Action='Back'}
+    )
+    while ($true) {
+        $choice=Read-VoidGuardMenu -Context $Context -Items $menu -Title 'THREAT INTELLIGENCE // RULE PACKS'
+        if (-not $choice -or $choice.Action -eq 'Back') { return }
+        Clear-Host; Show-VoidGuardHeader -Context $Context
+        try {
+            switch ($choice.Action) {
+                'Inventory' {
+                    $packs=@(Get-VoidGuardRulePackInventory -Context $Context)
+                    if ($packs.Count -eq 0) { Write-Host 'Пакетов правил пока нет.' -ForegroundColor Gray }
+                    else { $packs | Select-Object Id,Version,Publisher,Enabled,Trusted,IntegrityValid | Format-Table -Wrap | Out-Host }
+                }
+                'Preview' {
+                    $path=Read-Host 'Путь к распакованному каталогу подписанного обновления'
+                    if (-not $path) { continue }
+                    $preview=Get-VGRuleUpdatePreview -SourcePath $path -Context $Context
+                    Write-Host ("[{0}] {1} {2}" -f $preview.Status,$preview.PackId,$preview.Version) -ForegroundColor $(if ($preview.CanApply) { 'Green' } else { 'Yellow' })
+                    if ($preview.CanApply) {
+                        Write-Host ("Действие: {0} | Сейчас: {1} | Издатель: {2} | Key ID: {3}" -f $preview.Operation,$preview.CurrentVersion,$preview.Publisher,$preview.KeyId) -ForegroundColor Cyan
+                        Write-Host ("Файлов: {0}; после установки включён: {1}" -f @($preview.Files).Count,$preview.WillBeEnabled) -ForegroundColor Gray
+                    } else { Write-Host $preview.Reason -ForegroundColor Yellow }
+                }
+                'Install' {
+                    Write-Host 'Только RSA-SHA256 signed pack. Доверенный ключ должен быть в trusted-publishers.json.' -ForegroundColor Yellow
+                    Write-Host 'Никаких обновлений из интернета VoidGuard самостоятельно не скачивает.' -ForegroundColor DarkGray
+                    $path=Read-Host 'Каталог локального обновления'
+                    if (-not $path) { continue }
+                    $preview=Get-VGRuleUpdatePreview -SourcePath $path -Context $Context
+                    if (-not $preview.CanApply) { Write-Host "[BLOCK] $($preview.Reason)" -ForegroundColor Yellow; break }
+                    Write-Host ("[{0}] {1}: {2} -> {3}" -f $preview.Operation,$preview.PackId,$preview.CurrentVersion,$preview.Version) -ForegroundColor Cyan
+                    if ((Read-Host 'Введите INSTALL для записи файлов правил') -cne 'INSTALL') { Write-Host '[WAIT] Отменено.' -ForegroundColor Gray; break }
+                    $result=Install-VGRulePackUpdate -SourcePath $path -Context $Context -Confirmed
+                    Write-Host ("[{0}] {1}" -f $result.Status,$result.Message) -ForegroundColor $(if ($result.Success) { 'Green' } else { 'Yellow' })
+                    if ($result.Error) { Write-Host $result.Error -ForegroundColor Yellow }
+                    if ($result.HistoryId) { Write-Host "Сохранённая версия: $($result.HistoryId)" -ForegroundColor Gray }
+                }
+                'History' {
+                    $id=Read-Host 'ID пакета (Enter — вся история)'
+                    $history=@(Get-VGRulePackUpdateHistory -Context $Context -PackId $id)
+                    if ($history.Count -eq 0) { Write-Host 'Сохранённых версий нет.' -ForegroundColor Gray }
+                    else { $history | Select-Object PackId,HistoryId,Version,Trusted,IntegrityValid | Format-Table -Wrap | Out-Host }
+                }
+                'Rollback' {
+                    $id=Read-Host 'Pack ID'
+                    $historyId=Read-Host 'History ID (из списка истории)'
+                    if (-not $id -or -not $historyId) { continue }
+                    $preview=Restore-VGRulePackVersion -PackId $id -HistoryId $historyId -Context $Context
+                    Write-Host ("Возврат {0}: {1} -> {2}" -f $id,$preview.Preview.CurrentVersion,$preview.Preview.RestoreVersion) -ForegroundColor Cyan
+                    if ((Read-Host 'Введите ROLLBACK для возврата подписанной версии') -cne 'ROLLBACK') { Write-Host '[WAIT] Отменено.' -ForegroundColor Gray; break }
+                    $result=Restore-VGRulePackVersion -PackId $id -HistoryId $historyId -Context $Context -Confirmed
+                    Write-Host ("[{0}] {1}" -f $result.Status,$result.Version) -ForegroundColor $(if ($result.Success) { 'Green' } else { 'Yellow' })
+                    if ($result.Error) { Write-Host $result.Error -ForegroundColor Yellow }
+                }
+                'Activation' {
+                    $id=Read-Host 'Pack ID'
+                    $action=Read-Host 'Введите ENABLE или DISABLE'
+                    if (-not $id -or $action -cnotin @('ENABLE','DISABLE')) { continue }
+                    $enabled=$action -ceq 'ENABLE'
+                    $preview=Set-VGRulePackEnabled -PackId $id -Context $Context -Enabled:$enabled
+                    Write-Host ("Правила после изменения: {0}" -f (@($preview.Preview.ActivePacks) -join ', ')) -ForegroundColor Gray
+                    if ((Read-Host 'Введите CONFIRM, чтобы изменить настройки') -cne 'CONFIRM') { Write-Host '[WAIT] Отменено.' -ForegroundColor Gray; break }
+                    $result=Set-VGRulePackEnabled -PackId $id -Context $Context -Enabled:$enabled -Confirmed
+                    Write-Host ("[{0}] {1} Enabled={2}" -f $result.Status,$id,$enabled) -ForegroundColor $(if ($result.Success) { 'Green' } else { 'Yellow' })
+                }
+            }
+        } catch { Write-Host "[ERROR] $($_.Exception.Message)" -ForegroundColor Red }
+        Wait-VoidGuardKey
+    }
+}
+
+function Show-VGIncidentBundleScreen {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Context)
+    $menu=@(
+        [pscustomobject]@{Label='PREVIEW LOCAL DIAGNOSTIC BUNDLE';Action='Preview'},
+        [pscustomobject]@{Label='EXPORT INCIDENT BUNDLE ZIP';Action='Export'},
+        [pscustomobject]@{Label='BACK';Action='Back'}
+    )
+    while ($true) {
+        $choice=Read-VoidGuardMenu -Context $Context -Items $menu -Title 'THREAT INTELLIGENCE // INCIDENT BUNDLE'
+        if (-not $choice -or $choice.Action -eq 'Back') { return }
+        Clear-Host;Show-VoidGuardHeader -Context $Context
+        Write-Host 'LOCAL ONLY: ZIP не загружается в интернет.' -ForegroundColor Cyan
+        Write-Host 'По умолчанию сырые пути, команды и тексты событий исключены.' -ForegroundColor Gray
+        try {
+            $path=Read-Host 'Путь к ZIP (Enter — локальный каталог VoidGuard)'
+            $scan=Read-Host 'Дополнительный файл или каталог для сканирования (Enter — пропустить)'
+            $baseline=Read-Host 'Существующий System Baseline для сравнения (Enter — пропустить)'
+            $events=(Read-Host 'Включить метаданные Windows Defender events? Введите EVENTS') -ceq 'EVENTS'
+            $sensitive=(Read-Host 'Включить личные пути, команды и тексты событий? Введите SENSITIVE') -ceq 'SENSITIVE'
+            $preview=Get-VGIncidentPreview -OutputPath $path -ScanPath $scan -BaselinePath $baseline -IncludeEventLogs:$events -IncludeSensitive:$sensitive
+            Write-Host "Путь: $($preview.OutputPath)" -ForegroundColor Cyan
+            foreach ($category in $preview.Categories) { Write-Host ("[DATA] {0}" -f $category) -ForegroundColor Gray }
+            foreach ($warning in $preview.Warnings) { Write-Host ("[WARN] {0}" -f $warning) -ForegroundColor Yellow }
+            if ($choice.Action -eq 'Export') {
+                if ((Read-Host 'Проверьте состав. Введите EXPORT для создания ZIP') -cne 'EXPORT') {
+                    Write-Host '[WAIT] Отменено.' -ForegroundColor Gray
+                } else {
+                    $bundle=Export-VGIncidentBundle -Context $Context -OutputPath $preview.OutputPath -ScanPath $scan -BaselinePath $baseline -IncludeEventLogs:$events -IncludeSensitive:$sensitive -Confirmed
+                    Write-Host ("[{0}] {1}" -f $bundle.Status,$bundle.OutputPath) -ForegroundColor $(if ($bundle.Success) { 'Green' } else { 'Yellow' })
+                    Write-Host ("SHA-256: {0}" -f $bundle.SHA256) -ForegroundColor DarkGray
+                    foreach ($issue in @($bundle.CollectionIssues)) { Write-Host "[WARN] $issue" -ForegroundColor Yellow }
+                }
+            }
+        } catch { Write-Host "[ERROR] $($_.Exception.Message)" -ForegroundColor Red }
+        Wait-VoidGuardKey
+    }
+}
+
 function Start-VoidGuardConsole {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Context)
@@ -496,6 +616,8 @@ function Start-VoidGuardConsole {
         [pscustomobject]@{ Label = 'WINDOWS SECURITY STATUS'; Action = 'Status' },
         [pscustomobject]@{ Label = 'SYSTEM INTEGRITY / BASELINES'; Action = 'Integrity' },
         [pscustomobject]@{ Label = 'MICROSOFT DEFENDER OFFLINE'; Action = 'DefenderOffline' },
+        [pscustomobject]@{ Label = 'THREAT INTELLIGENCE / RULE PACKS'; Action = 'ThreatIntel' },
+        [pscustomobject]@{ Label = 'INCIDENT BUNDLE / EVIDENCE'; Action = 'IncidentBundle' },
         [pscustomobject]@{ Label = 'SECURE QUARANTINE'; Action = 'Quarantine' },
         [pscustomobject]@{ Label = 'SYSTEM SELF-TEST'; Action = 'SelfTest' },
         [pscustomobject]@{ Label = 'VISUAL EFFECTS DEMO'; Action = 'Demo' },
@@ -535,6 +657,8 @@ function Start-VoidGuardConsole {
                 'Status' { Show-VoidGuardSecurityScreen -Context $Context }
                 'Integrity' { Show-VGIntegrityScreen -Context $Context }
                 'DefenderOffline' { Show-VGDefenderOfflineScreen -Context $Context }
+                'ThreatIntel' { Show-VGRuleIntelligenceScreen -Context $Context }
+                'IncidentBundle' { Show-VGIncidentBundleScreen -Context $Context }
                 'Quarantine' { Show-VoidGuardQuarantineScreen -Context $Context }
                 'SelfTest' {
                     Clear-Host
