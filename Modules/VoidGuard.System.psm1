@@ -87,8 +87,9 @@ function Get-VoidGuardSecurityStatus {
 
 function Get-VoidGuardStartupEntries {
     [CmdletBinding()]
-    param()
+    param([ref]$Diagnostics)
 
+    $scanErrors = New-Object 'System.Collections.Generic.List[string]'
     $entries = New-Object System.Collections.Generic.List[object]
     if (Test-VoidGuardWindows) {
         $registryLocations = @(
@@ -112,7 +113,9 @@ function Get-VoidGuardStartupEntries {
                         })
                     }
                 }
-            } catch { }
+            } catch {
+                $scanErrors.Add(('Registry '+$location.Path+': '+$_.Exception.Message))
+            }
         }
     }
 
@@ -121,13 +124,18 @@ function Get-VoidGuardStartupEntries {
     if ($env:ProgramData) { $startupFolders += Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp' }
     foreach ($folder in $startupFolders) {
         if (-not (Test-Path -LiteralPath $folder)) { continue }
-        Get-ChildItem -LiteralPath $folder -File -Force -ErrorAction SilentlyContinue | ForEach-Object {
+        try {
+        Get-ChildItem -LiteralPath $folder -File -Force -ErrorAction Stop | ForEach-Object {
             $entries.Add([pscustomobject]@{
                 Type = 'StartupFolder'; Scope = if ($_.FullName -like "$env:APPDATA*") { 'User' } else { 'Machine' }
                 Name = $_.Name; Command = $_.FullName; Location = $folder
             })
         }
+        } catch {
+            $scanErrors.Add(('Startup folder '+$folder+': '+$_.Exception.Message))
+        }
     }
+    if ($null -ne $Diagnostics) { $Diagnostics.Value = $scanErrors.ToArray() }
     return $entries.ToArray()
 }
 

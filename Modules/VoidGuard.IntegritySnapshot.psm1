@@ -33,6 +33,13 @@ function Get-VGIntegritySnapshot {
                         $value=[ordered]@{Enabled=[string]$profile.Enabled;Inbound=[string]$profile.DefaultInboundAction;Outbound=[string]$profile.DefaultOutboundAction}
                         $items.Add((New-VGIntegrityRecord ('Firewall:'+[string]$profile.Name) (ConvertTo-Json -InputObject $value -Compress)))
                     }
+                    if ($state.FirewallAvailable -and @($state.FirewallProfiles).Count -eq 0) {
+                        $errors.Add('Firewall inventory could not be verified.')
+                    }
+                    if ($state.DefenderAvailable) {
+                        try { $null = Get-MpPreference -ErrorAction Stop }
+                        catch { $errors.Add('Defender exclusions could not be verified.') }
+                    }
                     foreach ($exclusion in @($state.DefenderExclusions)) {
                         if ($exclusion) { $items.Add((New-VGIntegrityRecord ('DefenderExclusion:'+[string]$exclusion) 'PRESENT')) }
                     }
@@ -55,10 +62,12 @@ function Get-VGIntegritySnapshot {
                     }
                 }
                 'Startup' {
-                    foreach ($entry in @(Get-VoidGuardStartupEntries)) {
+                    $startupErrors = @()
+                    foreach ($entry in @(Get-VoidGuardStartupEntries -Diagnostics ([ref]$startupErrors))) {
                         $key='{0}|{1}|{2}|{3}' -f @([string]$entry.Type,[string]$entry.Scope,[string]$entry.Location,[string]$entry.Name)
                         $items.Add((New-VGIntegrityRecord $key ([string]$entry.Command)))
                     }
+                    foreach ($startupError in @($startupErrors)) { $errors.Add([string]$startupError) }
                 }
                 'Files' {
                     $paths=New-Object 'System.Collections.Generic.List[string]'
