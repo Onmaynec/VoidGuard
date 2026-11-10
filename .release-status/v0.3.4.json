@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "tag": "v0.3.4",
+  "name": "VOIDGUARD v0.3.4 — CORE STABILITY",
+  "url": "https://github.com/Onmaynec/VoidGuard/releases/tag/v0.3.4",
+  "draft": false,
+  "prerelease": false,
+  "publishedAt": "2026-11-10T08:11:18Z",
+  "verifiedAtUtc": "2026-11-10T08:11:19.8503254Z",
+  "requiredAssets": [
+    "VoidGuard-v0.3.4-Portable.zip",
+    "VoidGuard-v0.3.4-Source.zip",
+    "SHA256SUMS.txt"
+  ],
+  "assets": [
+    {
+      "name": "SHA256SUMS.txt",
+      "size": 192,
+      "digest": "sha256:d55c2a16d74e9a84af0d10db64e66df5d4debfc5be292f5341a82b41ff17f8b4",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.3.4/SHA256SUMS.txt"
+    },
+    {
+      "name": "VoidGuard-v0.3.4-Portable.zip",
+      "size": 72159,
+      "digest": "sha256:40de45d434c4de9c1ce867b007bccb72ac0e438c3e0228c38fa4aa5e94adae31",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.3.4/VoidGuard-v0.3.4-Portable.zip"
+    },
+    {
+      "name": "VoidGuard-v0.3.4-Source.zip",
+      "size": 99115,
+      "digest": "sha256:5aa53af57ce208a8c63a79098edf2b168c7e2d49efa0781dcc69ad57ca24078e",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.3.4/VoidGuard-v0.3.4-Source.zip"
+    }
+  ]
+}
