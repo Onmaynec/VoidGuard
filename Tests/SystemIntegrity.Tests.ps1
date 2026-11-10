@@ -66,5 +66,12 @@ try {
     if (@($observed.Sections.Services.Records).Count -eq 0 -and $observed.Sections.Services.State -eq 'COMPLETE') {
         throw 'Service inventory is empty but falsely marked complete.'
     }
-    Write-Host '[OK] System Integrity: snapshots, drift, partial, live Windows inventory and safe Defender preview.' -ForegroundColor Green
+    $systemBaseline=Join-Path $temp 'system-baseline.json'
+    $fullSaved=New-VGIntegrityBaseline -BaselinePath $systemBaseline
+    if (-not (Test-Path -LiteralPath $systemBaseline -PathType Leaf)) { throw 'Full Windows baseline was not saved.' }
+    $fullCompared=Compare-VGIntegrityBaseline -BaselinePath $systemBaseline
+    if ($fullCompared.Status -notin @('CHANGED','UNCHANGED','PARTIAL')) { throw 'Full Windows baseline diff returned invalid status.' }
+    if (-not $fullCompared.PSObject.Properties['Changes']) { throw 'Full Windows comparison lost change details.' }
+
+    Write-Host '[OK] System Integrity: full Windows baseline, drift, partial, live inventory and safe Defender preview.' -ForegroundColor Green
 } finally { Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue }

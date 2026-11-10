@@ -44,6 +44,8 @@ $consoleDefinition = $consoleCommand.ScriptBlock.ToString()
 
 foreach ($requiredFragment in @(
     'SYSTEM SELF-TEST',
+    'SYSTEM INTEGRITY / BASELINES',
+    'MICROSOFT DEFENDER OFFLINE',
     'Операция завершилась ошибкой, но VoidGuard продолжает работу',
     'Invoke-VoidGuardQuickScan',
     'Invoke-VoidGuardPathScan'
