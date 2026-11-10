@@ -90,6 +90,14 @@ try {
     Invoke-VGProcessTest -Name 'BaselineDiff' -Arguments @('-Mode','BaselineDiff','-BaselinePath',$integrityJson,'-Professional','-NoAnimation','-Json') -ExpectJson
     Invoke-VGProcessTest -Name 'DefenderOfflinePreview' -Arguments @('-Mode','DefenderOffline','-Professional','-NoAnimation','-Json') -ExpectJson
 
+    $incidentFile=Join-Path $tempRoot 'incident-export.zip'
+    Invoke-VGProcessTest -Name 'IncidentPreview' -Arguments @('-Mode','IncidentPreview','-IncidentPath',$incidentFile,'-Professional','-NoAnimation','-Json') -ExpectJson
+    Invoke-VGProcessTest -Name 'IncidentExportPreview' -Arguments @('-Mode','IncidentExport','-IncidentPath',$incidentFile,'-Professional','-NoAnimation','-Json') -ExpectJson
+    if (Test-Path -LiteralPath $incidentFile) {
+        Add-VGFailure -Name 'IncidentExportPreview' -Problem 'Unconfirmed export wrote a ZIP.'
+    }
+    Invoke-VGProcessTest -Name 'RuleHistory' -Arguments @('-Mode','RuleHistory','-Professional','-NoAnimation','-Json') -ExpectJson
+
     Invoke-VGProcessTest -Name 'RemediateDryRun' -Arguments @('-Mode', 'Remediate', '-Path', $sample, '-Professional', '-NoAnimation', '-Json') -ExpectJson
 
     $reportBase = Join-Path $tempRoot 'reports\custom-scan'

@@ -16,6 +16,8 @@ $moduleOrder = @(
     'VoidGuard.IntegritySnapshot.psm1',
     'VoidGuard.IntegrityBaseline.psm1',
     'VoidGuard.DefenderOffline.psm1',
+    'VoidGuard.RuleUpdates.psm1',
+    'VoidGuard.IncidentBundle.psm1',
     'VoidGuard.UI.psm1',
     'VoidGuard.ConsoleFix.psm1',
     'VoidGuard.Stability.psm1'
