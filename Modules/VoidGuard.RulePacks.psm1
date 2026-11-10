@@ -85,6 +85,52 @@ function Import-VoidGuardRsaPublicKey {
     $Rsa.ImportParameters($parameters)
 }
 
+function Assert-VoidGuardBundledPackIdentity {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Manifest,
+        [Parameter(Mandatory)][string]$CanonicalPack,
+        [Parameter(Mandatory)]$Context
+    )
+
+    # Изменение этого каталога требует отдельного обновления доверенного набора в коде.
+    # Manifest сам по себе не может выдавать произвольному пакету статус bundled.
+    $pinned = @{
+        'detections.json' = @{ Hash = '274C32D1A8A952000F70E58FC92017EE691755D2706C3B6EEC910AD69C454478'; Type = 'pattern' }
+        'core.yar' = @{ Hash = 'CCCF10365CA77BDFC4F9CD81C310C5FF27F26C7204916AF83FEBEE859701A394'; Type = 'yara' }
+    }
+    $expectedPath = [IO.Path]::GetFullPath((Join-Path $Context.RootPath 'Rules\Packs\core')).TrimEnd('\')
+    if (-not [string]::Equals([IO.Path]::GetFullPath($CanonicalPack).TrimEnd('\'), $expectedPath, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Unknown bundled pack: only the pinned core directory is accepted.'
+    }
+    if ([string](Get-VoidGuardPropertyValue $Manifest 'id' '') -cne 'voidguard.core' -or
+        [string](Get-VoidGuardPropertyValue $Manifest 'name' '') -cne 'VoidGuard Core Defensive Rules' -or
+        [string](Get-VoidGuardPropertyValue $Manifest 'version' '') -cne '1.0.0' -or
+        [string](Get-VoidGuardPropertyValue $Manifest 'publisher' '') -cne 'VoidGuard Project' -or
+        [string](Get-VoidGuardPropertyValue $Manifest 'minimumVoidGuardVersion' '') -cne '0.3.0' -or
+        [string](Get-VoidGuardPropertyValue $Manifest 'trustMode' '') -cne 'bundled') {
+        throw 'Bundled core metadata differs from the pinned release identity.'
+    }
+    if ($null -ne (Get-VoidGuardPropertyValue $Manifest 'signature' $null)) {
+        throw 'Bundled core must not contain an external signature.'
+    }
+    $entries = @(Get-VoidGuardPropertyValue $Manifest 'files' @())
+    if ($entries.Count -ne $pinned.Count) { throw 'Bundled core file inventory differs from the trusted inventory.' }
+    $seen = @{}
+    foreach ($entry in $entries) {
+        $path = [string](Get-VoidGuardPropertyValue $entry 'path' '')
+        if ($seen.ContainsKey($path) -or -not $pinned.ContainsKey($path)) {
+            throw "Unexpected or duplicate bundled rule file: $path"
+        }
+        $seen[$path] = $true
+        $hash = [string](Get-VoidGuardPropertyValue $entry 'sha256' '')
+        $type = [string](Get-VoidGuardPropertyValue $entry 'type' '')
+        if ($hash -cne $pinned[$path].Hash -or $type -cne $pinned[$path].Type) {
+            throw "Bundled core file is not pinned: $path"
+        }
+    }
+}
+
 function Test-VoidGuardRulePack {
     [CmdletBinding()]
     param(
@@ -102,7 +148,13 @@ function Test-VoidGuardRulePack {
         $packItem = Get-Item -LiteralPath $PackPath -Force -ErrorAction Stop
         if (-not $packItem.PSIsContainer) { throw 'Rule-pack path is not a directory.' }
         $canonicalPack = $packItem.FullName
+        if (Get-VoidGuardPathReparseAncestor -Path $canonicalPack) {
+            throw 'Rule-pack directory contains a reparse point.'
+        }
         $manifestPath = Join-Path $canonicalPack 'manifest.json'
+        if (Get-VoidGuardPathReparseAncestor -Path $manifestPath) {
+            throw 'Rule-pack manifest contains a reparse point.'
+        }
         $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
     } catch {
         $errors += "Manifest cannot be loaded: $($_.Exception.Message)"
@@ -161,6 +213,10 @@ function Test-VoidGuardRulePack {
                     $errors += "Unsupported rule-pack file extension: $relative"
                     continue
                 }
+                if (Get-VoidGuardPathReparseAncestor -Path $fullPath) {
+                    $errors += "Rule-pack file contains a reparse point: $relative"
+                    continue
+                }
                 if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
                     $errors += "Rule-pack file is missing: $relative"
                     continue
@@ -188,12 +244,12 @@ function Test-VoidGuardRulePack {
     if ($manifest -and $errors.Count -eq 0) {
         switch ($trustMode) {
             'bundled' {
-                $expectedRoot = [IO.Path]::GetFullPath((Join-Path $Context.RootPath 'Rules\Packs')).TrimEnd('\') + '\'
-                if ($canonicalPack.StartsWith($expectedRoot, [StringComparison]::OrdinalIgnoreCase)) {
+                try {
+                    Assert-VoidGuardBundledPackIdentity -Manifest $manifest -CanonicalPack $canonicalPack -Context $Context
                     $trusted = $true
-                    $trustReason = 'Bundled release pack with verified file hashes.'
-                } else {
-                    $errors += 'bundled trustMode is allowed only inside Rules\Packs.'
+                    $trustReason = 'Bundled core pinned to the release code and verified file hashes.'
+                } catch {
+                    $errors += $_.Exception.Message
                 }
             }
             'signed' {

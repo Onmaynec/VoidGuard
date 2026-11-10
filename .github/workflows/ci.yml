@@ -40,6 +40,14 @@ jobs:
         shell: powershell
         run: ./Tests/Stability.Tests.ps1
 
+      - name: Run PowerShell 7 rule-pack trust tests
+        shell: pwsh
+        run: ./Tests/RulePackTrust.Tests.ps1
+
+      - name: Run Windows PowerShell 5.1 rule-pack trust tests
+        shell: powershell
+        run: ./Tests/RulePackTrust.Tests.ps1
+
       - name: Run PowerShell 7 pending ledger tests
         shell: pwsh
         run: ./Tests/PendingLedger.Tests.ps1
