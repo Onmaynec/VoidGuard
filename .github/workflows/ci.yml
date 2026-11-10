@@ -40,6 +40,14 @@ jobs:
         shell: powershell
         run: ./Tests/Stability.Tests.ps1
 
+      - name: Run PowerShell 7 pending ledger tests
+        shell: pwsh
+        run: ./Tests/PendingLedger.Tests.ps1
+
+      - name: Run Windows PowerShell 5.1 pending ledger tests
+        shell: powershell
+        run: ./Tests/PendingLedger.Tests.ps1
+
       - name: Run Windows PowerShell 5.1 full mode regression tests
         shell: powershell
         run: ./Tests/FullRegression.Tests.ps1
