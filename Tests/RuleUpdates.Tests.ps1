@@ -128,7 +128,12 @@ try {
     }
 
     $coreDenied=$false
-    try { $null=Assert-VGRuleUpdateId 'voidguard.core' } catch { $coreDenied=$true }
+    try {
+        & (Get-Module VoidGuard.RuleUpdates -ErrorAction Stop) { Assert-VGRuleUpdateId -Id 'voidguard.core' } | Out-Null
+    } catch {
+        if ($_.Exception.Message -like '*bundled core pack cannot be replaced*') { $coreDenied=$true }
+        else { throw }
+    }
     if (-not $coreDenied) { throw 'Bundled core was not protected.' }
 
     Write-Host '[OK] Signed update: preview, WhatIf, install, version history, rollback, activation and hostile fixtures.' -ForegroundColor Green
