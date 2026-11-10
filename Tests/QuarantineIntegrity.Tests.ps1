@@ -72,6 +72,24 @@ try {
     }
     if (Test-Path -LiteralPath $container) { throw 'Успешно восстановленный объект остался в карантине.' }
 
+    $dryPath = Join-Path $tempRoot 'dry-run.cmd'
+    [IO.File]::WriteAllBytes($dryPath, $bytes)
+    $dryResult = Invoke-VoidGuardQuarantine -Path $dryPath -Confirmed -WhatIf
+    if ($dryResult.Status -ne 'DRY_RUN' -or -not (Test-Path -LiteralPath $dryPath)) {
+        throw 'Quarantine -WhatIf изменил содержимое системы.'
+    }
+
+    $livePath = Join-Path $tempRoot 'live.cmd'
+    [IO.File]::WriteAllBytes($livePath, $bytes)
+    $liveResult = Invoke-VoidGuardQuarantine -Path $livePath -Confirmed
+    if (-not $liveResult.Success -or $liveResult.Status -ne 'QUARANTINED' -or (Test-Path -LiteralPath $livePath)) {
+        throw 'Помещение тестового файла в карантин не удалось.'
+    }
+    $liveRestored = Restore-VoidGuardQuarantineItem -Id $liveResult.Id
+    if (-not $liveRestored.Success -or (Get-FileHash -LiteralPath $livePath -Algorithm SHA256).Hash -ne $hash) {
+        throw 'Возврат реального файла из карантина не прошёл проверку.'
+    }
+
     $blocked = $false
     try { $null = Restore-VoidGuardQuarantineItem -Id '..\escape' }
     catch { $blocked = $true }
