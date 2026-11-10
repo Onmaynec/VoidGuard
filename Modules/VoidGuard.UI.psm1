@@ -65,33 +65,42 @@ function Read-VoidGuardMenu {
         [Parameter(Mandatory)][object[]]$Items,
         [string]$Title = 'SELECT SECURITY OPERATION'
     )
-
+    
+    if ($null -eq $Items -or $Items.Count -eq 0) {
+        throw 'Меню VoidGuard не содержит доступных пунктов.'
+    }
+    
     $selected = 0
     while ($true) {
         Clear-Host
         Show-VoidGuardHeader -Context $Context
         Write-Host ('║' + (' ' * 76) + '║') -ForegroundColor DarkGreen
         $titleLine = ('  ' + $Title).PadRight(76)
+        if ($titleLine.Length -gt 76) { $titleLine = $titleLine.Substring(0, 76) }
         Write-Host ('║' + $titleLine + '║') -ForegroundColor Cyan
         Write-Host ('║' + (' ' * 76) + '║') -ForegroundColor DarkGreen
-
+    
         for ($index = 0; $index -lt $Items.Count; $index++) {
             $prefix = if ($index -eq $selected) { '▶' } else { ' ' }
-            $line = ('  {0} [{1:00}] {2}' -f $prefix, $index + 1, $Items[$index].Label)
-            if ($line.Length -gt 76) { $line = $line.Substring(0, 76) }
-            $line = $line.PadRight(76)
+            $label = [string]$Items[$index].Label
+            $line = VoidGuard.ConsoleFix\Format-VoidGuardMenuLine `
+                -Prefix $prefix `
+                -Number ($index + 1) `
+                -Label $label `
+                -Width 76
+    
             if ($index -eq $selected) {
                 Write-Host ('║' + $line + '║') -ForegroundColor Black -BackgroundColor Green
             } else {
                 Write-Host ('║' + $line + '║') -ForegroundColor Gray
             }
         }
-
+    
         Write-Host ('║' + (' ' * 76) + '║') -ForegroundColor DarkGreen
         Write-Host ('╠' + ('═' * 76) + '╣') -ForegroundColor DarkGreen
         Write-Host ('║ ↑ ↓ Навигация    ENTER Выбор    ESC Назад    F1 Помощь'.PadRight(77) + '║') -ForegroundColor DarkGray
         Write-Host ('╚' + ('═' * 76) + '╝') -ForegroundColor DarkGreen
-
+    
         $key = [Console]::ReadKey($true)
         switch ($key.Key) {
             'UpArrow' {
