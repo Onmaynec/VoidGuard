@@ -19,7 +19,18 @@ PowerShell 5.1+ · Windows 10/11 · defensive security toolkit
 
 Декоративные эффекты всегда помечаются `[VISUAL]` и не участвуют в решении об угрозе. Реальный скоринг строится из проверяемых признаков: пути, подписи, SHA-256, PE-метаданных, энтропии, persistence, rule packs и опционального YARA.
 
-## Возможности v0.4.0 — SYSTEM INTEGRITY
+## Возможности v0.5.0 — THREAT INTELLIGENCE
+
+- **Signed Rule Updates** — просмотр, проверка RSA-SHA256 и установка локально полученных подписанных rule packs;
+- **Version History** — сохранение предыдущей подписанной версии и возврат к ней по ID;
+- **Rule Activation** — после установки пакет включается в сканирование только по отдельному подтверждению;
+- **Incident Bundle** — локальный ZIP с диагностикой безопасности Windows, находками процессов и persistence, версиями правил и pending-операциями;
+- **Privacy Review** — предварительный просмотр содержимого, исключение сырых путей и команд по умолчанию, отдельный выбор расширенных сведений;
+- **Optional evidence** — проверка выбранного файла/папки, diff baseline и ограниченные метаданные журнала Microsoft Defender.
+
+### Функции предыдущих версий
+
+#### v0.4.0 — System Integrity
 
 - **System Baseline** — снимки настроек Defender, Firewall, UAC, SmartScreen, прокси, служб, заданий и автозапуска;
 - **Baseline Diff** — сравнение ADDED/REMOVED/CHANGED, контроль SHA-256 выбранных файлов и hosts;
@@ -57,7 +68,7 @@ PowerShell 5.1+ · Windows 10/11 · defensive security toolkit
 
 ## Установка
 
-Скачайте `VoidGuard-v0.4.0-Portable.zip` из **Releases**, распакуйте в новую папку и запустите:
+Скачайте `VoidGuard-v0.5.0-Portable.zip` из **Releases**, распакуйте в новую папку и запустите:
 
 ```cmd
 VoidGuard.cmd
@@ -75,7 +86,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\VoidGuard.ps1
 .\VoidGuard.ps1 -Mode SelfTest -Professional -NoAnimation -Json
 ```
 
-> Не смешивайте файлы разных версий. Полностью удалите старую распакованную папку и распакуйте `v0.4.0` в новую.
+> Не смешивайте файлы разных версий. Полностью удалите старую распакованную папку и распакуйте `v0.5.0` в новую.
 
 YARA не входит в архив и не скачивается автоматически. Без него VoidGuard продолжает использовать встроенные правила, PE-анализ и эвристику.
 
@@ -87,11 +98,43 @@ Pack активируется только после проверки:
 2. отсутствия absolute path / `..` / выхода из каталога pack;
 3. SHA-256 каждого перечисленного файла;
 4. режима доверия:
-   - `bundled` — pack поставлен внутри проверенного релиза VoidGuard;
+   - `bundled` — только встроенный `voidguard.core`, закреплённый в коде по файлам и SHA-256;
    - `signed` — RSA-SHA256 подпись проверена ключом из `Rules/trusted-publishers.json`;
    - `local` — запрещён по умолчанию и требует явной настройки.
 
 Невалидный pack показывается в inventory, но не участвует в сканировании.
+
+## Threat Intelligence
+
+Пакеты не скачиваются автоматически. Полученный из доверенного источника каталог с `manifest.json` и файлами правил сначала проверяется. Установить можно **только подписанный пакет**: официальный встроенный `voidguard.core` не заменяется. Изначально `Rules/trusted-publishers.json` пуст — ключ издателя нужно добавить вручную после независимой проверки его происхождения.
+
+```powershell
+# Просмотр подписанного локального обновления
+.\VoidGuard.ps1 -Mode RuleUpdate -UpdateSource "C:\Updates\example.rules" -Json
+
+# Установка только после проверки и явного подтверждения
+.\VoidGuard.ps1 -Mode RuleUpdate -UpdateSource "C:\Updates\example.rules" -Confirmed -Json
+
+# Найти предыдущие версии, выполнить откат
+.\VoidGuard.ps1 -Mode RuleHistory -RulePackId "example.rules" -Json
+.\VoidGuard.ps1 -Mode RuleRollback -RulePackId "example.rules" -HistoryId "h-20261110120000-abc123def456" -Confirmed -Json
+
+# Отдельно включить правила в движке сканирования
+.\VoidGuard.ps1 -Mode RuleActivate -RulePackId "example.rules" -Enable -Confirmed -Json
+
+# Просмотр того, что может войти в архив
+.\VoidGuard.ps1 -Mode IncidentPreview -IncidentPath "C:\Temp\incident.zip" -Json
+
+# Локальный архив без сырых команд и персональных путей
+.\VoidGuard.ps1 -Mode IncidentExport -IncidentPath "C:\Temp\incident.zip" -Confirmed -Json
+
+# Расширенный экспорт только по сознательному выбору пользователя
+.\VoidGuard.ps1 -Mode IncidentExport -IncidentPath "C:\Temp\incident-full.zip" -IncludeSensitive -IncludeEventLogs -Confirmed -Json
+```
+
+Incident Bundle **ничего не отправляет в сеть**. Архив содержит `diagnostics.json`, `manifest.json` и `SHA256SUMS.txt`. Сохраняйте ZIP и доверенные ключи в защищённом месте. Расширенный экспорт может содержать команды запуска, адреса и пути пользователей.
+
+[Описание формата и безопасности Threat Intelligence](docs/THREAT_INTELLIGENCE.md)
 
 ## System Integrity
 
@@ -154,14 +197,15 @@ Pack активируется только после проверки:
 - [Safe remediation](docs/REMEDIATION.md)
 - [Архитектура](docs/ARCHITECTURE.md)
 - [System Integrity](docs/SYSTEM_INTEGRITY.md)
+- [Threat Intelligence](docs/THREAT_INTELLIGENCE.md)
 
-## Изменения v0.4.0
+## Изменения v0.5.0
 
-Исправления совместимости Windows PowerShell 5.1 перенесены в исходные Scanner и UI. В случае недоступного файла, ошибки перечисления, достижения лимита или отсутствия обработанных объектов сканирование получает статус `PARTIAL`. Карантин проверяет содержимое до восстановления, а встроенные правила не доверяются произвольным каталогам `Rules/Packs`.
+Реализовал установку только RSA-подписанных правил с повторной проверкой после копирования, сохранение прежней версии и отдельное включение. Добавил локальный Incident Bundle с предварительным просмотром данных и исключением чувствительных полей по умолчанию.
 
 ## Проверки стабильности
 
-CI запускает отдельные проверки в PowerShell 7 и Windows PowerShell 5.1. Полный прогон реально запускает `SelfTest`, `Status`, `Processes`, `Persistence`, `Pending`, `RulePacks`, `QuickScan`, `CustomScan`, `Locks`, `Yara`, безопасный dry-run remediation, генерацию HTML/JSON-отчётов и визуальную демонстрацию.
+CI запускает проверки на PowerShell 7 и Windows PowerShell 5.1, включая подписанные обновления с откатом, redaction, ZIP-манифесты и старые режимы. Полный прогон реально запускает `SelfTest`, `Status`, `Processes`, `Persistence`, `Pending`, `RulePacks`, `QuickScan`, `CustomScan`, `Locks`, `Yara`, безопасный dry-run remediation, генерацию HTML/JSON-отчётов и визуальную демонстрацию.
 
 ## Безопасность remediation
 
@@ -174,7 +218,8 @@ VoidGuard — дополнительный диагностический инс
 ## Roadmap
 
 - **v0.4.0** — реализовано: baseline/diff и Defender Offline orchestration;
-- **v0.5** — безопасное обновление rule packs и incident bundle;
+- **v0.5.0** — реализовано: локальные подписанные обновления правил, история версий и Incident Bundle;
+- **v0.6** — корреляция поведения процессов и механизмов закрепления;
 - **v1.0** — стабильный CLI contract и подписанные приложения/релизы.
 
 ## Лицензия
