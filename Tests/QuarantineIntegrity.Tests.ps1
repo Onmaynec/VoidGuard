@@ -90,6 +90,29 @@ try {
         throw 'Возврат реального файла из карантина не прошёл проверку.'
     }
 
+    $realParent = Join-Path $tempRoot 'real'
+    $junctionParent = Join-Path $tempRoot 'linked'
+    New-Item -ItemType Directory -Path $realParent -Force | Out-Null
+    $junction = New-Item -ItemType Junction -Path $junctionParent -Target $realParent -ErrorAction Stop
+    $realTarget = Join-Path $realParent 'payload.cmd'
+    [IO.File]::WriteAllBytes($realTarget, $bytes)
+    $junctionTarget = Join-Path $junctionParent 'payload.cmd'
+    $reparse = Get-VoidGuardPathReparseAncestor -Path $junctionTarget
+    if (-not $reparse -or -not [string]::Equals($reparse, $junctionParent, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Junction в родительском каталоге не обнаружен.'
+    }
+    $unsafePolicy = Test-VoidGuardProtectedTarget -Path $junctionTarget
+    if ($unsafePolicy.Allowed) { throw 'Reparse в родительском каталоге обошёл политику.' }
+    $blocked = $false
+    $quarantineModule = Get-Module VoidGuard.Quarantine -ErrorAction Stop
+    try {
+        & $quarantineModule {
+            param([string]$Candidate)
+            Test-VoidGuardRestoreDestination -Path $Candidate
+        } (Join-Path $junctionParent 'missing.cmd') | Out-Null
+    } catch { $blocked = $true }
+    if (-not $blocked) { throw 'Restore destination с junction не был отклонён.' }
+
     $blocked = $false
     try { $null = Restore-VoidGuardQuarantineItem -Id '..\escape' }
     catch { $blocked = $true }
