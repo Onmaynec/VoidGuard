@@ -82,6 +82,9 @@ function Import-VoidGuardRsaPublicKey {
     $parameters = New-Object Security.Cryptography.RSAParameters
     $parameters.Modulus = [Convert]::FromBase64String([string]$root.Modulus)
     $parameters.Exponent = [Convert]::FromBase64String([string]$root.Exponent)
+    if ($null -eq $parameters.Modulus -or $parameters.Modulus.Length -lt 256) {
+        throw 'RSA rule-pack trust key must contain at least 2048 bits.'
+    }
     $Rsa.ImportParameters($parameters)
 }
 

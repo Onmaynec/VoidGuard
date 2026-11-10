@@ -197,7 +197,11 @@ function Get-VGIncidentData {
             $events=@(Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Windows Defender/Operational';StartTime=(Get-Date).AddDays(-7)} -MaxEvents 100 -ErrorAction Stop)
             $entries=@($events | ForEach-Object {
                 $ev=[ordered]@{Id=$_.Id;Level=[string]$_.LevelDisplayName;TimeUtc=$_.TimeCreated.ToUniversalTime().ToString('o')}
-                if ($IncludeSensitive) { $ev.Message=[string]$_.Message }
+                if ($IncludeSensitive) {
+                    $message=[string]$_.Message
+                    if ($message.Length -gt 8192) { $message=$message.Substring(0,8192)+' [TRUNCATED]' }
+                    $ev.Message=$message
+                }
                 [pscustomobject]$ev
             })
             Add-IncidentCollection 'DefenderEvents' $entries

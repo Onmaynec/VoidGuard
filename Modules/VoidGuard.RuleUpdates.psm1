@@ -196,7 +196,15 @@ function Install-VGRulePackUpdate {
         $problem=$_.Exception.Message
         if ($newMoved -and (Test-Path -LiteralPath $destination)) {
             $failed=Join-Path $stagingRoot ('failed-'+[guid]::NewGuid().ToString('N'))
-            try { Move-Item -LiteralPath $destination -Destination $failed -ErrorAction Stop } catch { }
+            try {
+                Move-Item -LiteralPath $destination -Destination $failed -ErrorAction Stop
+            } catch {
+                return [pscustomobject]@{
+                    Success=$false;Status='CLEANUP_FAILED'
+                    Error=$problem;RecoveryPath=$destination
+                    PreviousVersionPath=if ($oldMoved) { $backup } else { $null }
+                }
+            }
         }
         if ($oldMoved -and -not (Test-Path -LiteralPath $destination) -and (Test-Path -LiteralPath $backup)) {
             try { Move-Item -LiteralPath $backup -Destination $destination -ErrorAction Stop }

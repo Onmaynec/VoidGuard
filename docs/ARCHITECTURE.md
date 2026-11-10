@@ -63,7 +63,7 @@ Scanner учитывает кандидатов, успешно обработа
 
 ### Trust modes
 
-- `bundled` — pack внутри `Rules\Packs` официального release archive;
+- `bundled` — только закреплённый в коде `voidguard.core` из официального релиза;
 - `signed` — manifest payload проверен ключом из `Rules\trusted-publishers.json`;
 - `local` — запрещён по умолчанию, разрешается только явной настройкой.
 
