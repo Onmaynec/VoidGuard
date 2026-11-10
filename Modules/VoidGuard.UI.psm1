@@ -135,13 +135,21 @@ function Show-VoidGuardScanSummary {
     Show-VoidGuardHeader -Context $Context
     Write-Host 'SCAN COMPLETE' -ForegroundColor Green
     Write-VGStatusLine -Label 'Mode' -Value ([string]$Result.Mode) -Color Cyan
+    Write-VGStatusLine -Label 'Files discovered' -Value ([string]$Result.FilesDiscovered)
     Write-VGStatusLine -Label 'Files scanned' -Value ([string]$Result.FilesScanned)
+    Write-VGStatusLine -Label 'Files skipped' -Value ([string]$Result.FilesSkipped)
+    Write-VGStatusLine -Label 'Files failed' -Value ([string]$Result.FilesFailed)
+    Write-VGStatusLine -Label 'Scan status' -Value ([string]$Result.ScanStatus) -Color $(if ($Result.Complete) { 'Green' } else { 'Yellow' })
     Write-VGStatusLine -Label 'Findings' -Value ([string]$Result.Findings.Count) -Color $(if ($Result.Findings.Count -gt 0) { 'Yellow' } else { 'Green' })
     Write-VGStatusLine -Label 'Duration' -Value ([string]$Result.Duration)
     Write-Host
 
     if ($Result.Findings.Count -eq 0) {
-        Write-Host '[OK] Эвристические находки выше порога не обнаружены.' -ForegroundColor Green
+        if ($Result.Complete) {
+            Write-Host '[OK] На проверенных объектах находки выше порога не обнаружены.' -ForegroundColor Green
+        } else {
+            Write-Host '[WARN] Проверка неполная. Отсутствие находок не означает отсутствие угроз.' -ForegroundColor Yellow
+        }
         Write-Host 'Это не гарантирует полное отсутствие вредоносного ПО.' -ForegroundColor DarkGray
     } else {
         Write-Host ('{0,-10} {1,-6} {2,-56}' -f 'RISK', 'SCORE', 'PATH') -ForegroundColor Cyan
@@ -154,6 +162,14 @@ function Show-VoidGuardScanSummary {
             foreach ($reason in @($finding.Reasons | Select-Object -First 3)) {
                 Write-Host ("             └─ $reason") -ForegroundColor DarkGray
             }
+        }
+    }
+    if (-not $Result.Complete) {
+        Write-Host '[WARN] Часть проверки не завершена: проверьте ошибки, недоступные каталоги и лимит файлов.' -ForegroundColor Yellow
+        if ($Result.ScanLimitReached) { Write-Host 'Достигнут лимит количества файлов для сканирования.' -ForegroundColor Yellow }
+        if ($Result.EnumerationErrorCount -gt 0) { Write-Host "Ошибок перечисления: $($Result.EnumerationErrorCount)" -ForegroundColor Yellow }
+        foreach ($fileError in @($Result.FileErrors | Select-Object -First 5)) {
+            Write-Host ("[ERROR] {0}: {1}" -f $fileError.Path, $fileError.Error) -ForegroundColor DarkYellow
         }
     }
     Wait-VoidGuardKey
@@ -361,11 +377,15 @@ function Show-VoidGuardQuarantineScreen {
 function Start-VoidGuardConsole {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Context)
-
+    
     if ($Context.Settings.verifyPendingOnStartup) {
-        Get-VoidGuardPendingRemediations -Verify | Out-Null
+        try {
+            Get-VoidGuardPendingRemediations -Verify | Out-Null
+        } catch {
+            # Ошибка проверки ledger не должна блокировать запуск интерфейса.
+        }
     }
-
+    
     $menu = @(
         [pscustomobject]@{ Label = 'QUICK THREAT SCAN'; Action = 'QuickScan' },
         [pscustomobject]@{ Label = 'SCAN FILE OR DIRECTORY'; Action = 'CustomScan' },
@@ -375,10 +395,11 @@ function Start-VoidGuardConsole {
         [pscustomobject]@{ Label = 'PENDING REMEDIATION LEDGER'; Action = 'Pending' },
         [pscustomobject]@{ Label = 'WINDOWS SECURITY STATUS'; Action = 'Status' },
         [pscustomobject]@{ Label = 'SECURE QUARANTINE'; Action = 'Quarantine' },
+        [pscustomobject]@{ Label = 'SYSTEM SELF-TEST'; Action = 'SelfTest' },
         [pscustomobject]@{ Label = 'VISUAL EFFECTS DEMO'; Action = 'Demo' },
         [pscustomobject]@{ Label = 'EXIT'; Action = 'Exit' }
     )
-
+    
     while ($true) {
         $choice = Read-VoidGuardMenu -Context $Context -Items $menu
         if (-not $choice -or $choice.Action -eq 'Exit') {
@@ -386,31 +407,61 @@ function Start-VoidGuardConsole {
             Write-Host 'VOIDGUARD OFFLINE // STAY SAFE' -ForegroundColor DarkGreen
             return
         }
-
-        switch ($choice.Action) {
-            'QuickScan' {
-                Clear-Host; Show-VoidGuardHeader -Context $Context
-                Show-VGLoadingBar -Label 'THREAT MATRIX'
-                $Context.LastScan = Invoke-VoidGuardQuickScan -Context $Context -ShowProgress
-                Show-VoidGuardScanSummary -Context $Context -Result $Context.LastScan
-            }
-            'CustomScan' {
-                Clear-Host; Show-VoidGuardHeader -Context $Context
-                $path = Read-Host 'Путь к файлу или папке'
-                if (-not [string]::IsNullOrWhiteSpace($path)) {
-                    try {
+    
+        try {
+            switch ($choice.Action) {
+                'QuickScan' {
+                    Clear-Host
+                    Show-VoidGuardHeader -Context $Context
+                    Show-VGLoadingBar -Label 'THREAT MATRIX'
+                    $Context.LastScan = Invoke-VoidGuardQuickScan -Context $Context -ShowProgress
+                    Show-VoidGuardScanSummary -Context $Context -Result $Context.LastScan
+                }
+                'CustomScan' {
+                    Clear-Host
+                    Show-VoidGuardHeader -Context $Context
+                    $path = Read-Host 'Путь к файлу или папке'
+                    if (-not [string]::IsNullOrWhiteSpace($path)) {
                         $Context.LastScan = Invoke-VoidGuardPathScan -Path $path -Context $Context -ShowProgress
                         Show-VoidGuardScanSummary -Context $Context -Result $Context.LastScan
-                    } catch { Write-Host "[ERROR] $($_.Exception.Message)" -ForegroundColor Red; Wait-VoidGuardKey }
+                    }
+                }
+                'Processes' { Show-VoidGuardProcessScreen -Context $Context }
+                'Persistence' { Show-VoidGuardPersistenceScreen -Context $Context }
+                'Remediation' { Show-VoidGuardRemediationScreen -Context $Context }
+                'Pending' { Show-VoidGuardPendingScreen -Context $Context }
+                'Status' { Show-VoidGuardSecurityScreen -Context $Context }
+                'Quarantine' { Show-VoidGuardQuarantineScreen -Context $Context }
+                'SelfTest' {
+                    Clear-Host
+                    Show-VoidGuardHeader -Context $Context
+                    $health = Get-VoidGuardRuntimeHealth
+                    if ($health.Healthy) {
+                        Write-Host '[OK] Все обязательные компоненты загружены.' -ForegroundColor Green
+                    } else {
+                        Write-Host '[ERROR] Не загружены обязательные команды:' -ForegroundColor Red
+                        foreach ($commandName in @($health.MissingCommands)) {
+                            Write-Host "  - $commandName" -ForegroundColor Yellow
+                        }
+                    }
+                    Write-Host "PowerShell: $($health.PowerShell)" -ForegroundColor Cyan
+                    Write-Host "Проверено команд: $($health.CheckedCommands)" -ForegroundColor DarkCyan
+                    Wait-VoidGuardKey
+                }
+                'Demo' {
+                    Show-VoidGuardVisualDemo -RootPath $Context.RootPath
+                    Wait-VoidGuardKey
                 }
             }
-            'Processes' { Show-VoidGuardProcessScreen -Context $Context }
-            'Persistence' { Show-VoidGuardPersistenceScreen -Context $Context }
-            'Remediation' { Show-VoidGuardRemediationScreen -Context $Context }
-            'Pending' { Show-VoidGuardPendingScreen -Context $Context }
-            'Status' { Show-VoidGuardSecurityScreen -Context $Context }
-            'Quarantine' { Show-VoidGuardQuarantineScreen -Context $Context }
-            'Demo' { Show-VoidGuardVisualDemo -RootPath $Context.RootPath; Wait-VoidGuardKey }
+        } catch {
+            Clear-Host
+            Show-VoidGuardHeader -Context $Context
+            Write-Host '[ERROR] Операция завершилась ошибкой, но VoidGuard продолжает работу.' -ForegroundColor Red
+            Write-Host $_.Exception.Message -ForegroundColor Yellow
+            if ($_.InvocationInfo.PositionMessage) {
+                Write-Host $_.InvocationInfo.PositionMessage -ForegroundColor DarkRed
+            }
+            Wait-VoidGuardKey
         }
     }
 }
