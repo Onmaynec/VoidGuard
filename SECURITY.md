@@ -6,7 +6,7 @@ VoidGuard — защитная диагностическая утилита. О
 
 ## Защитные ограничения remediation
 
-VoidGuard v0.3.0 блокирует quarantine/remediation для:
+VoidGuard v0.3.4 блокирует quarantine/remediation для:
 
 - Windows и Program Files;
 - Windows Resource Protection файлов;
@@ -27,8 +27,14 @@ VoidGuard v0.3.0 блокирует quarantine/remediation для:
 - невалидные packs остаются видимыми в inventory, но не используются scanner;
 - rules влияют только на evidence/score и не вызывают quarantine/remediation;
 - VoidGuard не загружает YARA binary или packs из сети автоматически.
+- режим `bundled` доверяет только закреплённому core pack с проверяемыми метаданными и SHA-256 файлов;
+- reparse points в каталоге pack, manifest и файлах правил блокируются.
 
 `bundled` означает, что pack поставляется внутри release archive. Проверяйте SHA256SUMS release перед первым запуском.
+
+## Восстановление из карантина
+
+Перед восстановлением проверяются схема, ID, размер и SHA-256 payload. Подменённые данные, reparse points в пути и защищённые каталоги блокируются. Если путь назначения занят, восстановление по умолчанию запрещено. Проверка целостности не защищает от полного изменения установленного кода программы привилегированным пользователем.
 
 ## Report security
 
