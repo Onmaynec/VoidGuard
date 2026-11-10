@@ -9,7 +9,7 @@
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [ValidateSet('Interactive', 'QuickScan', 'CustomScan', 'Status', 'Processes', 'Persistence', 'Locks', 'Remediate', 'Pending', 'RulePacks', 'Yara', 'Demo', 'SelfTest', 'BaselineCreate', 'BaselineDiff', 'DefenderOffline')]
+    [ValidateSet('Interactive', 'QuickScan', 'CustomScan', 'Status', 'Processes', 'Persistence', 'Locks', 'Remediate', 'Pending', 'RulePacks', 'Yara', 'Demo', 'SelfTest', 'BaselineCreate', 'BaselineDiff', 'DefenderOffline', 'RuleUpdate', 'RuleHistory', 'RuleRollback', 'RuleActivate', 'IncidentPreview', 'IncidentExport')]
     [string]$Mode = 'Interactive',
 
     [string]$Path,
@@ -32,6 +32,26 @@ param(
     [switch]$NoHosts,
 
     [switch]$RebootAcknowledged,
+
+    [string]$UpdateSource,
+
+    [string]$RulePackId,
+
+    [string]$HistoryId,
+
+    [switch]$Enable,
+
+    [switch]$Disable,
+
+    [string]$IncidentPath,
+
+    [string]$IncidentScanPath,
+
+    [string]$IncidentBaselinePath,
+
+    [switch]$IncludeEventLogs,
+
+    [switch]$IncludeSensitive,
 
     [string]$ReportPath,
 
@@ -69,6 +89,8 @@ $moduleOrder = @(
     'VoidGuard.IntegritySnapshot.psm1',
     'VoidGuard.IntegrityBaseline.psm1',
     'VoidGuard.DefenderOffline.psm1',
+    'VoidGuard.RuleUpdates.psm1',
+    'VoidGuard.IncidentBundle.psm1',
     'VoidGuard.Reporting.psm1',
     'VoidGuard.UI.psm1',
     'VoidGuard.ConsoleFix.psm1',
@@ -181,6 +203,33 @@ try {
             } else {
                 Write-ResultOutput (Get-VGDefenderOfflineReadiness)
             }
+        }
+        'RuleUpdate' {
+            if (-not $UpdateSource) { throw 'RuleUpdate requires -UpdateSource.' }
+            if ($Confirmed -or $WhatIfPreference) {
+                Write-ResultOutput (Install-VGRulePackUpdate -SourcePath $UpdateSource -Context $context -Confirmed:$Confirmed -WhatIf:$WhatIfPreference)
+            } else {
+                Write-ResultOutput (Get-VGRuleUpdatePreview -SourcePath $UpdateSource -Context $context)
+            }
+        }
+        'RuleHistory' {
+            Write-ResultOutput (Get-VGRulePackUpdateHistory -Context $context -PackId $RulePackId)
+        }
+        'RuleRollback' {
+            if (-not $RulePackId -or -not $HistoryId) { throw 'RuleRollback requires -RulePackId and -HistoryId.' }
+            Write-ResultOutput (Restore-VGRulePackVersion -PackId $RulePackId -HistoryId $HistoryId -Context $context -Confirmed:$Confirmed -WhatIf:$WhatIfPreference)
+        }
+        'RuleActivate' {
+            if (-not $RulePackId -or ([bool]$Enable -eq [bool]$Disable)) {
+                throw 'RuleActivate requires -RulePackId and exactly one of -Enable or -Disable.'
+            }
+            Write-ResultOutput (Set-VGRulePackEnabled -PackId $RulePackId -Context $context -Enabled:([bool]$Enable) -Confirmed:$Confirmed -WhatIf:$WhatIfPreference)
+        }
+        'IncidentPreview' {
+            Write-ResultOutput (Get-VGIncidentPreview -OutputPath $IncidentPath -ScanPath $IncidentScanPath -BaselinePath $IncidentBaselinePath -IncludeEventLogs:$IncludeEventLogs -IncludeSensitive:$IncludeSensitive)
+        }
+        'IncidentExport' {
+            Write-ResultOutput (Export-VGIncidentBundle -Context $context -OutputPath $IncidentPath -ScanPath $IncidentScanPath -BaselinePath $IncidentBaselinePath -IncludeEventLogs:$IncludeEventLogs -IncludeSensitive:$IncludeSensitive -Confirmed:$Confirmed -WhatIf:$WhatIfPreference)
         }
         'Demo' {
             Show-VoidGuardVisualDemo -RootPath $script:VoidGuardRoot
