@@ -48,6 +48,22 @@ jobs:
         shell: powershell
         run: ./Tests/RulePackTrust.Tests.ps1
 
+      - name: Run PowerShell 7 scanner diagnostics tests
+        shell: pwsh
+        run: ./Tests/ScannerDiagnostics.Tests.ps1
+
+      - name: Run Windows PowerShell 5.1 scanner diagnostics tests
+        shell: powershell
+        run: ./Tests/ScannerDiagnostics.Tests.ps1
+
+      - name: Run PowerShell 7 quarantine integrity tests
+        shell: pwsh
+        run: ./Tests/QuarantineIntegrity.Tests.ps1
+
+      - name: Run Windows PowerShell 5.1 quarantine integrity tests
+        shell: powershell
+        run: ./Tests/QuarantineIntegrity.Tests.ps1
+
       - name: Run PowerShell 7 pending ledger tests
         shell: pwsh
         run: ./Tests/PendingLedger.Tests.ps1
