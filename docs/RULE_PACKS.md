@@ -121,6 +121,31 @@ file=<path>|<sha256>|<type>
 
 Включение этого режима снижает доверие к результатам и не рекомендуется на рабочих системах.
 
+## Обновление подписанных правил (v0.5.0)
+
+Используется только локально полученная и **распакованная** папка с `manifest.json`. VoidGuard не загружает файлы из сети и не принимает ZIP без распаковки, чтобы избежать небезопасного извлечения архивов. Перед применением из локального каталога проверяются RSA-SHA256, SHA-256 каждого файла, полный список содержимого, размер и пути. Допустимы не более 16 файлов правил, размер одного — до 10 МиБ, суммарный каталог — до 25 МиБ. Каталоги внутри пакета, links и reparse points запрещены.
+
+```powershell
+# Предпросмотр
+.\VoidGuard.ps1 -Mode RuleUpdate -UpdateSource "C:\Updates\example.rules" -Json
+
+# Установка (не включает новый пакет автоматически)
+.\VoidGuard.ps1 -Mode RuleUpdate -UpdateSource "C:\Updates\example.rules" -Confirmed -Json
+
+# История
+.\VoidGuard.ps1 -Mode RuleHistory -RulePackId "example.rules" -Json
+
+# Откат ранее сохранённой подписанной версии
+.\VoidGuard.ps1 -Mode RuleRollback -RulePackId "example.rules" -HistoryId "h-20261110120000-abc123def456" -Confirmed -Json
+
+# Активация после отдельной проверки
+.\VoidGuard.ps1 -Mode RuleActivate -RulePackId "example.rules" -Enable -Confirmed -Json
+```
+
+Обновление допускается только на более новую версию от того же издателя и RSA keyId, если текущая версия уже установлена и доверена. Предыдущая версия хранится в `Rules/History`. Bundled core остаётся закреплённым в приложении и не обновляется таким способом.
+
+По умолчанию `Rules/trusted-publishers.json` пустой. Пользователь должен самостоятельно получить, проверить и добавить публичный RSA-ключ издателя. VoidGuard не подменяет этот этап и не назначает доверие только по совпадению названия pack.
+
 ## Pattern rules
 
 `detections.json` содержит массив:

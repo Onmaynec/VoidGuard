@@ -1,4 +1,4 @@
-# Использование VoidGuard v0.4.0
+# Использование VoidGuard v0.5.0
 
 ## Интерактивный режим
 
@@ -90,6 +90,40 @@ Quick Scan и Custom Scan автоматически используют акт
 ```
 
 По умолчанию baseline сохраняется в %LOCALAPPDATA%\VoidGuard\Baselines. При PARTIAL часть данных недоступна. Подробности — [System Integrity](SYSTEM_INTEGRITY.md).
+
+## Threat Intelligence v0.5.0
+
+```powershell
+# Проверка локальной подписанной папки — никаких изменений
+.\VoidGuard.ps1 -Mode RuleUpdate -UpdateSource "C:\Updates\example.rules" -Json
+
+# Установка после проверки — старая версия уходит в историю
+.\VoidGuard.ps1 -Mode RuleUpdate -UpdateSource "C:\Updates\example.rules" -Confirmed -Json
+
+# Список сохранённых версий, безопасный откат
+.\VoidGuard.ps1 -Mode RuleHistory -RulePackId "example.rules" -Json
+.\VoidGuard.ps1 -Mode RuleRollback -RulePackId "example.rules" -HistoryId "h-20261110120000-abc123def456" -Confirmed -Json
+
+# Явное включение и отключение нового пакета в движке
+.\VoidGuard.ps1 -Mode RuleActivate -RulePackId "example.rules" -Enable -Confirmed -Json
+.\VoidGuard.ps1 -Mode RuleActivate -RulePackId "example.rules" -Disable -Confirmed -Json
+
+# Предпросмотр Incident Bundle без записи
+.\VoidGuard.ps1 -Mode IncidentPreview -IncidentPath "C:\Temp\incident.zip" -Json
+
+# Сохранение локального ZIP со стандартным ограниченным набором полей
+.\VoidGuard.ps1 -Mode IncidentExport -IncidentPath "C:\Temp\incident.zip" -Confirmed -Json
+
+# При необходимости — включить скан выбранного пути и метаданные событий
+.\VoidGuard.ps1 -Mode IncidentExport -IncidentPath "C:\Temp\incident-detail.zip" -IncidentScanPath "C:\Temp\sample.ps1" -IncludeEventLogs -Confirmed -Json
+
+# Расширенный экспорт с персональными полями; используйте только при необходимости
+.\VoidGuard.ps1 -Mode IncidentExport -IncidentPath "C:\Temp\incident-full.zip" -IncludeSensitive -Confirmed -Json
+```
+
+Запрещён автоматический импорт неподписанных пакетов. Публичные ключи издателей добавляются вручную в `Rules/trusted-publishers.json` после независимой проверки. Если ключ отсутствует, установка заблокирована. Новые пакеты не активируются без отдельной команды.
+
+Incident ZIP создаётся локально, без сетевых запросов. Перед отправкой кому-либо проверьте архив самостоятельно. [Подробное описание](THREAT_INTELLIGENCE.md).
 
 ## Форматы отчётов
 
