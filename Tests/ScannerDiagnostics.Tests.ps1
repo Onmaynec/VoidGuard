@@ -34,6 +34,19 @@ try {
     if ([int]$complete.FilesDiscovered -ne 1 -or [int]$complete.FilesScanned -ne 1 -or [int]$complete.FilesFailed -ne 0) {
         throw 'Счётчики полной проверки неверны.'
     }
+    $stream = [IO.File]::Open($one, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+    try {
+        $locked = Invoke-VoidGuardPathScan -Path $one -Context $ctx
+    } finally {
+        $stream.Dispose()
+    }
+    if ($locked.Complete -or $locked.ScanStatus -ne 'PARTIAL' -or $locked.FilesFailed -ne 1 -or $locked.FilesScanned -ne 0) {
+        throw 'Заблокированный и недоступный файл ошибочно признан успешно проверенным.'
+    }
+    if (@($locked.FileErrors).Count -ne 1) {
+        throw 'Ошибка чтения заблокированного файла не включена в диагностику.'
+    }
+
     if ($null -eq $complete.FileErrors -or $null -eq $complete.EnumerationErrors) {
         throw 'Диагностика сканирования отсутствует.'
     }

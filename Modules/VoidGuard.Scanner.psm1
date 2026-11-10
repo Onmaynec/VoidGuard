@@ -225,6 +225,7 @@ function Test-VoidGuardFile {
     $pe = Get-VoidGuardPeInfo -Path $item.FullName
     $entropyBytes = [int](Get-VoidGuardScannerSetting -Settings $Context.Settings -Name 'entropySampleBytes' -DefaultValue 1048576)
     $entropy = Get-VoidGuardFileEntropy -Path $item.FullName -MaximumBytes $entropyBytes
+    if ($null -eq $entropy) { throw "Cannot read file for entropy analysis: $($item.FullName)" }
     if ($pe.IsPE -and $executableExtensions -notcontains $extension) {
         $score += 34
         $reasons.Add('PE executable content does not match the filename extension.')
@@ -252,6 +253,10 @@ function Test-VoidGuardFile {
     $textSample = if (($scriptExtensions -contains $extension) -or $RuleEngine.Patterns.Count -gt 0) {
         Get-VoidGuardTextSample -Path $item.FullName -MaximumCharacters $maximumPatternBytes
     } else { $null }
+
+    if ($null -eq $textSample -and (($scriptExtensions -contains $extension) -or $RuleEngine.Patterns.Count -gt 0)) {
+        throw "Cannot read file for pattern analysis: $($item.FullName)"
+    }
 
     if ($scriptExtensions -contains $extension -and $null -ne $textSample) {
         $patterns = @(
@@ -300,7 +305,11 @@ function Test-VoidGuardFile {
             $reasons.Add("Known malicious hash: $($KnownBadHashes[$hash.ToUpperInvariant()])")
         }
     } catch {
-        $reasons.Add('SHA-256 could not be calculated.')
+        throw "SHA-256 could not be calculated for $($item.FullName): $($_.Exception.Message)"
+    }
+    $afterRead = Get-Item -LiteralPath $item.FullName -Force -ErrorAction Stop
+    if ($afterRead.Length -ne $item.Length -or $afterRead.LastWriteTimeUtc -ne $item.LastWriteTimeUtc) {
+        throw "File changed during analysis: $($item.FullName)"
     }
 
     return [pscustomobject]@{
