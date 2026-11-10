@@ -335,7 +335,7 @@ function Test-VoidGuardScanCandidate {
 function Get-VoidGuardScanCandidates {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][string[]]$Paths,
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Paths,
         [int]$MaxFiles = 2500,
         [ref]$Diagnostics
     )
@@ -380,20 +380,20 @@ function New-VoidGuardScanResult {
     param(
         [Parameter(Mandatory)]$Context,
         [Parameter(Mandatory)][string]$Mode,
-        [Parameter(Mandatory)][string[]]$Paths,
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Paths,
         [Parameter(Mandatory)]$Started,
         [Parameter(Mandatory)]$Completed,
         [Parameter(Mandatory)][int]$FilesDiscovered,
         [Parameter(Mandatory)][int]$FilesScanned,
         [Parameter(Mandatory)][int]$FilesSkipped,
         [Parameter(Mandatory)][int]$FilesFailed,
-        [Parameter(Mandatory)][object[]]$FileErrors,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$FileErrors,
         [Parameter(Mandatory)]$Diagnostics,
-        [Parameter(Mandatory)][object[]]$Findings,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Findings,
         [Parameter(Mandatory)]$RuleEngine
     )
 
-    $partial = ($FilesFailed -gt 0) -or ($Diagnostics.EnumerationErrorCount -gt 0) -or $Diagnostics.LimitReached
+    $partial = ($FilesDiscovered -eq 0) -or ($FilesFailed -gt 0) -or ($Diagnostics.EnumerationErrorCount -gt 0) -or $Diagnostics.LimitReached
     return [pscustomobject]@{
         Version = $Context.Version
         Mode = $Mode
@@ -420,7 +420,7 @@ function New-VoidGuardScanResult {
 function Invoke-VoidGuardScanCore {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][string[]]$Paths,
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Paths,
         [Parameter(Mandatory)][string]$Mode,
         [Parameter(Mandatory)]$Context,
         [switch]$ShowProgress

@@ -50,7 +50,7 @@ try {
         value = [Convert]::ToBase64String((New-Object byte[] 256))
     }
     $signedManifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $signedManifestPath -Encoding UTF8
-    $rsa = New-Object Security.Cryptography.RSACryptoServiceProvider(2048)
+    $rsa = New-Object Security.Cryptography.RSACryptoServiceProvider -ArgumentList 2048
     try {
         $key = @([pscustomobject]@{ keyId = 'test-key'; publisher = 'Test'; rsaXml = $rsa.ToXmlString($false) })
         $trustPath = Join-Path $tempRoot 'Rules\trusted-publishers.json'
