@@ -92,3 +92,8 @@ Report не подписывается VoidGuard и не является неи
 Get-FileHash .\Reports\quick-scan.json -Algorithm SHA256
 Get-FileHash .\Reports\quick-scan.html -Algorithm SHA256
 ```
+
+
+## System Integrity v0.4.0
+
+Результаты BaselineDiff доступны в JSON с полями Changes, Before/After, Issues, Status и Complete. PARTIAL означает неполное сравнение; для автоматизации используйте JSON. HTML-отчёты в этой версии ориентированы на прежние результаты файлового анализа.

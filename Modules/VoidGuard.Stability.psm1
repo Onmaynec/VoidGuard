@@ -28,7 +28,12 @@ function Get-VoidGuardRuntimeHealth {
         'Get-VoidGuardPendingRemediations',
         'Get-VoidGuardRulePackInventory',
         'Invoke-VoidGuardYaraScan',
-        'Invoke-VoidGuardQuarantine'
+        'Invoke-VoidGuardQuarantine',
+        'Get-VGIntegritySnapshot',
+        'New-VGIntegrityBaseline',
+        'Compare-VGIntegrityBaseline',
+        'Get-VGDefenderOfflineReadiness',
+        'Invoke-VGDefenderOffline'
     )
 
     $missing = @($requiredCommands | Where-Object {

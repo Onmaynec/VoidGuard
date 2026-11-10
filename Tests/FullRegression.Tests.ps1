@@ -81,6 +81,15 @@ try {
     Invoke-VGProcessTest -Name 'CustomScan' -Arguments @('-Mode', 'CustomScan', '-Path', $scanDirectory, '-Professional', '-NoAnimation', '-Json') -ExpectJson
     Invoke-VGProcessTest -Name 'Locks' -Arguments @('-Mode', 'Locks', '-Path', $sample, '-Professional', '-NoAnimation', '-Json') -ExpectJson
     Invoke-VGProcessTest -Name 'Yara' -Arguments @('-Mode', 'Yara', '-Path', $sample, '-Professional', '-NoAnimation', '-Json') -ExpectJson
+    $integritySource=Join-Path $tempRoot 'integrity.txt'
+    'baseline-v1' | Set-Content -LiteralPath $integritySource -Encoding ASCII
+    $integrityJson=Join-Path $tempRoot 'baseline.json'
+    Invoke-VGProcessTest -Name 'BaselineCreate' -Arguments @('-Mode','BaselineCreate','-BaselinePath',$integrityJson,'-IntegrityPaths',$integritySource,'-IntegritySections','Files','-NoHosts','-Professional','-NoAnimation','-Json') -ExpectJson
+    if (-not (Test-Path -LiteralPath $integrityJson -PathType Leaf)) { Add-VGFailure -Name 'BaselineCreate' -Problem 'Baseline JSON not created.' }
+    'baseline-v2' | Set-Content -LiteralPath $integritySource -Encoding ASCII
+    Invoke-VGProcessTest -Name 'BaselineDiff' -Arguments @('-Mode','BaselineDiff','-BaselinePath',$integrityJson,'-Professional','-NoAnimation','-Json') -ExpectJson
+    Invoke-VGProcessTest -Name 'DefenderOfflinePreview' -Arguments @('-Mode','DefenderOffline','-Professional','-NoAnimation','-Json') -ExpectJson
+
     Invoke-VGProcessTest -Name 'RemediateDryRun' -Arguments @('-Mode', 'Remediate', '-Path', $sample, '-Professional', '-NoAnimation', '-Json') -ExpectJson
 
     $reportBase = Join-Path $tempRoot 'reports\custom-scan'

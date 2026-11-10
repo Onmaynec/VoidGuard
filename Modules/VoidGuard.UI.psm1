@@ -383,6 +383,97 @@ function Show-VoidGuardQuarantineScreen {
     }
 }
 
+function Show-VGIntegrityScreen {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Context)
+
+    $menu=@(
+        [pscustomobject]@{ Label='SAVE NEW SYSTEM BASELINE'; Action='Create' },
+        [pscustomobject]@{ Label='COMPARE WITH EXISTING BASELINE'; Action='Compare' },
+        [pscustomobject]@{ Label='BACK'; Action='Back' }
+    )
+    while ($true) {
+        $choice=Read-VoidGuardMenu -Context $Context -Items $menu -Title 'SYSTEM INTEGRITY // BASELINE'
+        if (-not $choice -or $choice.Action -eq 'Back') { return }
+        Clear-Host
+        Show-VoidGuardHeader -Context $Context
+        try {
+            if ($choice.Action -eq 'Create') {
+                Write-Host 'SYSTEM INTEGRITY // SAVE BASELINE' -ForegroundColor Cyan
+                Write-Host 'Снимок сохранит защитные настройки, службы, задачи, автозапуск и hosts.' -ForegroundColor Gray
+                Write-Host 'Снимок может содержать чувствительные пути и команды запуска. Не публикуйте его.' -ForegroundColor Yellow
+                $path=Read-Host 'Файл baseline (.json, Enter — локальный каталог VoidGuard)'
+                $extra=Read-Host 'Дополнительный файл для проверки SHA-256 (Enter — без него)'
+                $paths=if ($extra) { @($extra) } else { @() }
+                $result=New-VGIntegrityBaseline -BaselinePath $path -SelectedPaths $paths
+                Write-Host ("[{0}] {1}" -f $result.Status,$result.BaselinePath) -ForegroundColor $(if ($result.Status -eq 'COMPLETE') { 'Green' } else { 'Yellow' })
+                Write-Host ("SHA-256: {0}" -f $result.SHA256) -ForegroundColor DarkGray
+                foreach ($errorText in @($result.Errors | Select-Object -First 10)) {
+                    Write-Host "[WARN] $errorText" -ForegroundColor Yellow
+                }
+            }
+            if ($choice.Action -eq 'Compare') {
+                Write-Host 'SYSTEM INTEGRITY // BASELINE DIFF' -ForegroundColor Cyan
+                $path=Read-Host 'Полный путь к существующему baseline (.json)'
+                if (-not [string]::IsNullOrWhiteSpace($path)) {
+                    $result=Compare-VGIntegrityBaseline -BaselinePath $path
+                    Write-Host ("[{0}] Changes: {1} | Added: {2} | Removed: {3} | Modified: {4}" -f $result.Status,$result.ChangesCount,$result.Added,$result.Removed,$result.Changed) -ForegroundColor $(if ($result.Complete) { 'Green' } else { 'Yellow' })
+                    foreach ($item in @($result.Changes | Select-Object -First 35)) {
+                        Write-Host ("[{0}] {1} :: {2}" -f $item.Kind,$item.Section,$item.Key) -ForegroundColor Yellow
+                        if ($item.Kind -eq 'CHANGED') {
+                            Write-Host ("  Было: {0}" -f $item.Before) -ForegroundColor DarkGray
+                            Write-Host ("  Стало: {0}" -f $item.After) -ForegroundColor Gray
+                        }
+                    }
+                    foreach ($problem in @($result.Issues)) { Write-Host "[WARN] $problem" -ForegroundColor Yellow }
+                    foreach ($problem in @($result.CollectionErrors | Select-Object -First 10)) { Write-Host "[ERROR] $problem" -ForegroundColor Yellow }
+                    if (-not $result.Complete) {
+                        Write-Host 'Неполный раздел не сравнивается: отсутствие записи не считается удалением.' -ForegroundColor Yellow
+                    }
+                }
+            }
+        } catch {
+            Write-Host "[ERROR] $($_.Exception.Message)" -ForegroundColor Red
+        }
+        Wait-VoidGuardKey
+    }
+}
+
+function Show-VGDefenderOfflineScreen {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Context)
+
+    Clear-Host
+    Show-VoidGuardHeader -Context $Context
+    Write-Host 'MICROSOFT DEFENDER // OFFLINE CHECK' -ForegroundColor Cyan
+    $state=Get-VGDefenderOfflineReadiness
+    Write-Host ("Status: {0} | Defender: {1} | WinRE: {2} | BitLocker: {3}" -f $state.Status,$state.Defender,$state.WinRE,$state.BitLocker) -ForegroundColor $(if ($state.Ready) { 'Green' } else { 'Yellow' })
+    foreach ($problem in @($state.Blocks)) { Write-Host "[BLOCK] $problem" -ForegroundColor Yellow }
+    foreach ($message in @($state.Warnings)) { Write-Host "[WARN] $message" -ForegroundColor DarkYellow }
+    Write-Host
+    Write-Host 'Offline Scan может немедленно перезагрузить Windows. Результаты доступны в журнале Windows Security.' -ForegroundColor Yellow
+    if (-not $state.Ready) {
+        Write-Host 'Запуск заблокирован, пока не устранены перечисленные причины.' -ForegroundColor Gray
+        Wait-VoidGuardKey
+        return
+    }
+    $accept=Read-Host 'Сохраните документы. Введите OFFLINE для продолжения'
+    if ($accept -cne 'OFFLINE') {
+        Write-Host '[WAIT] Отменено.' -ForegroundColor Gray
+        Wait-VoidGuardKey
+        return
+    }
+    $restart=Read-Host 'Подтвердите немедленную перезагрузку словом RESTART'
+    if ($restart -cne 'RESTART') {
+        Write-Host '[WAIT] Отменено.' -ForegroundColor Gray
+        Wait-VoidGuardKey
+        return
+    }
+    $operation=Invoke-VGDefenderOffline -Confirmed -RebootAcknowledged
+    Write-Host ("[{0}] {1}" -f $operation.Status,$operation.Message) -ForegroundColor $(if ($operation.Success) { 'Green' } else { 'Yellow' })
+    Wait-VoidGuardKey
+}
+
 function Start-VoidGuardConsole {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Context)
@@ -403,6 +494,8 @@ function Start-VoidGuardConsole {
         [pscustomobject]@{ Label = 'LOCKED FILE / SAFE REMEDIATION'; Action = 'Remediation' },
         [pscustomobject]@{ Label = 'PENDING REMEDIATION LEDGER'; Action = 'Pending' },
         [pscustomobject]@{ Label = 'WINDOWS SECURITY STATUS'; Action = 'Status' },
+        [pscustomobject]@{ Label = 'SYSTEM INTEGRITY / BASELINES'; Action = 'Integrity' },
+        [pscustomobject]@{ Label = 'MICROSOFT DEFENDER OFFLINE'; Action = 'DefenderOffline' },
         [pscustomobject]@{ Label = 'SECURE QUARANTINE'; Action = 'Quarantine' },
         [pscustomobject]@{ Label = 'SYSTEM SELF-TEST'; Action = 'SelfTest' },
         [pscustomobject]@{ Label = 'VISUAL EFFECTS DEMO'; Action = 'Demo' },
@@ -440,6 +533,8 @@ function Start-VoidGuardConsole {
                 'Remediation' { Show-VoidGuardRemediationScreen -Context $Context }
                 'Pending' { Show-VoidGuardPendingScreen -Context $Context }
                 'Status' { Show-VoidGuardSecurityScreen -Context $Context }
+                'Integrity' { Show-VGIntegrityScreen -Context $Context }
+                'DefenderOffline' { Show-VGDefenderOfflineScreen -Context $Context }
                 'Quarantine' { Show-VoidGuardQuarantineScreen -Context $Context }
                 'SelfTest' {
                     Clear-Host

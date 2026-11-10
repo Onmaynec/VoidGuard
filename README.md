@@ -19,7 +19,15 @@ PowerShell 5.1+ · Windows 10/11 · defensive security toolkit
 
 Декоративные эффекты всегда помечаются `[VISUAL]` и не участвуют в решении об угрозе. Реальный скоринг строится из проверяемых признаков: пути, подписи, SHA-256, PE-метаданных, энтропии, persistence, rule packs и опционального YARA.
 
-## Возможности v0.3.4 — CORE STABILITY
+## Возможности v0.4.0 — SYSTEM INTEGRITY
+
+- **System Baseline** — снимки настроек Defender, Firewall, UAC, SmartScreen, прокси, служб, заданий и автозапуска;
+- **Baseline Diff** — сравнение ADDED/REMOVED/CHANGED, контроль SHA-256 выбранных файлов и hosts;
+- неполные разделы имеют статус PARTIAL и не интерпретируются как удалённые настройки;
+- **Microsoft Defender Offline** — проверка готовности, WinRE и BitLocker, предупреждение о перезагрузке и два обязательных подтверждения;
+- консольное меню и CLI; никаких автоматических изменений при анализе системы.
+
+### Сохранённые функции предыдущих версий
 
 - полноценный исходный цикл меню без runtime-подмен;
 - отдельные счётчики успешных, пропущенных и неудачных проверок, статус `PARTIAL` при неполном сканировании;
@@ -49,7 +57,7 @@ PowerShell 5.1+ · Windows 10/11 · defensive security toolkit
 
 ## Установка
 
-Скачайте `VoidGuard-v0.3.4-Portable.zip` из **Releases**, распакуйте в новую папку и запустите:
+Скачайте `VoidGuard-v0.4.0-Portable.zip` из **Releases**, распакуйте в новую папку и запустите:
 
 ```cmd
 VoidGuard.cmd
@@ -67,7 +75,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\VoidGuard.ps1
 .\VoidGuard.ps1 -Mode SelfTest -Professional -NoAnimation -Json
 ```
 
-> Не смешивайте файлы разных версий. Полностью удалите старую распакованную папку и распакуйте `v0.3.4` в новую.
+> Не смешивайте файлы разных версий. Полностью удалите старую распакованную папку и распакуйте `v0.4.0` в новую.
 
 YARA не входит в архив и не скачивается автоматически. Без него VoidGuard продолжает использовать встроенные правила, PE-анализ и эвристику.
 
@@ -84,6 +92,27 @@ Pack активируется только после проверки:
    - `local` — запрещён по умолчанию и требует явной настройки.
 
 Невалидный pack показывается в inventory, но не участвует в сканировании.
+
+## System Integrity
+
+```powershell
+# Сохранить состояние Windows в локальный JSON (уникальное имя)
+.\VoidGuard.ps1 -Mode BaselineCreate -Json
+
+# Добавить файл для проверки SHA-256
+.\VoidGuard.ps1 -Mode BaselineCreate -IntegrityPaths "C:\Users\Public\sample.exe" -Json
+
+# Сравнить с сохранённым baseline
+.\VoidGuard.ps1 -Mode BaselineDiff -BaselinePath "C:\Temp\baseline.json" -Json
+
+# Проверить готовность Defender Offline, не перезагружая Windows
+.\VoidGuard.ps1 -Mode DefenderOffline -Json
+
+# ТОЛЬКО после сохранения документов и подготовки BitLocker
+.\VoidGuard.ps1 -Mode DefenderOffline -Confirmed -RebootAcknowledged
+```
+
+Снимки сохраняются локально, не отправляются в сеть и могут содержать чувствительные пути и команды запуска. Defender Offline может **немедленно перезагрузить компьютер**. Просмотр состояния и режим без двух флагов не запускают сканирование. Подробнее: [System Integrity](docs/SYSTEM_INTEGRITY.md).
 
 ## CLI
 
@@ -124,8 +153,9 @@ Pack активируется только после проверки:
 - [Reports](docs/REPORTS.md)
 - [Safe remediation](docs/REMEDIATION.md)
 - [Архитектура](docs/ARCHITECTURE.md)
+- [System Integrity](docs/SYSTEM_INTEGRITY.md)
 
-## Изменения v0.3.4
+## Изменения v0.4.0
 
 Исправления совместимости Windows PowerShell 5.1 перенесены в исходные Scanner и UI. В случае недоступного файла, ошибки перечисления, достижения лимита или отсутствия обработанных объектов сканирование получает статус `PARTIAL`. Карантин проверяет содержимое до восстановления, а встроенные правила не доверяются произвольным каталогам `Rules/Packs`.
 
@@ -143,7 +173,7 @@ VoidGuard — дополнительный диагностический инс
 
 ## Roadmap
 
-- **v0.4** — Defender Offline orchestration и baseline/diff состояния системы;
+- **v0.4.0** — реализовано: baseline/diff и Defender Offline orchestration;
 - **v0.5** — безопасное обновление rule packs и incident bundle;
 - **v1.0** — стабильный CLI contract и подписанные приложения/релизы.
 

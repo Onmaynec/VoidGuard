@@ -13,6 +13,9 @@ $moduleOrder = @(
     'VoidGuard.Remediation.psm1',
     'VoidGuard.Quarantine.psm1',
     'VoidGuard.Reporting.psm1',
+    'VoidGuard.IntegritySnapshot.psm1',
+    'VoidGuard.IntegrityBaseline.psm1',
+    'VoidGuard.DefenderOffline.psm1',
     'VoidGuard.UI.psm1',
     'VoidGuard.ConsoleFix.psm1',
     'VoidGuard.Stability.psm1'
@@ -41,6 +44,8 @@ $consoleDefinition = $consoleCommand.ScriptBlock.ToString()
 
 foreach ($requiredFragment in @(
     'SYSTEM SELF-TEST',
+    'SYSTEM INTEGRITY / BASELINES',
+    'MICROSOFT DEFENDER OFFLINE',
     'Операция завершилась ошибкой, но VoidGuard продолжает работу',
     'Invoke-VoidGuardQuickScan',
     'Invoke-VoidGuardPathScan'

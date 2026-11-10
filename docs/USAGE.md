@@ -1,4 +1,4 @@
-# Использование VoidGuard v0.3.4
+# Использование VoidGuard v0.4.0
 
 ## Интерактивный режим
 
@@ -69,6 +69,27 @@ Quick Scan и Custom Scan автоматически используют акт
 # Демонстрация визуальных эффектов без изменений системы
 .\VoidGuard.ps1 -Mode Demo
 ```
+
+## System Integrity
+
+```powershell
+# Сохранить стандартный снимок Windows
+.\VoidGuard.ps1 -Mode BaselineCreate -Json
+
+# Сохранить выбранный файл, без hosts
+.\VoidGuard.ps1 -Mode BaselineCreate -BaselinePath "C:\Temp\baseline.json" -IntegrityPaths "C:\Temp\sample.exe" -IntegritySections Files -NoHosts -Json
+
+# Сравнить с исходным состоянием
+.\VoidGuard.ps1 -Mode BaselineDiff -BaselinePath "C:\Temp\baseline.json" -Json
+
+# Проверить готовность Defender Offline (без перезагрузки)
+.\VoidGuard.ps1 -Mode DefenderOffline -Json
+
+# После сохранения документов и подготовки BitLocker
+.\VoidGuard.ps1 -Mode DefenderOffline -Confirmed -RebootAcknowledged
+```
+
+По умолчанию baseline сохраняется в %LOCALAPPDATA%\VoidGuard\Baselines. При PARTIAL часть данных недоступна. Подробности — [System Integrity](SYSTEM_INTEGRITY.md).
 
 ## Форматы отчётов
 

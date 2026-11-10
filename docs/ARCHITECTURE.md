@@ -1,4 +1,4 @@
-# Архитектура VoidGuard v0.3.4
+# Архитектура VoidGuard v0.4.0
 
 ```text
 VoidGuard.ps1
@@ -10,6 +10,9 @@ VoidGuard.ps1
  ├── VoidGuard.Persistence  — Services, Scheduled Tasks, WMI, Run keys
  ├── VoidGuard.Remediation  — Restart Manager, process stop, delete-on-reboot
  ├── VoidGuard.Quarantine   — безопасное перемещение и восстановление
+ ├── VoidGuard.IntegritySnapshot — снимки наблюдаемого состояния
+ ├── VoidGuard.IntegrityBaseline — сохранение и сравнение JSON baseline
+ ├── VoidGuard.DefenderOffline — проверка готовности и запуск по согласию
  ├── VoidGuard.Reporting    — offline HTML/JSON serialization
  ├── VoidGuard.UI           — TUI и управление клавиатурой
  ├── VoidGuard.ConsoleFix   — центрирование и форматирование вывода
@@ -111,6 +114,13 @@ Scanner учитывает кандидатов, успешно обработа
 
 ## План развития
 
-- v0.4: Defender Offline orchestration и baseline/diff;
+- v0.4.0: Defender Offline preflight и baseline/diff реализованы;
 - v0.5: безопасное обновление packs и incident bundle;
 - v1.0: стабильный CLI contract и подписанные приложения/релизы.
+
+
+## System Integrity v0.4.0
+
+Снимки содержат разделы Security, Services, Tasks, Startup и Files, со статусами COMPLETE/PARTIAL и явными ошибками. Неполный раздел при сравнении пропускается целиком: отсутствие доступной записи не означает её удаление. JSON проверяется по схеме v1, уникальности ключей и идентичности компьютера.
+
+Defender Offline отделён от диагностики. Предпросмотр не выполняет изменяющих действий. Реальная команда Start-MpWDOScan разрешена только после двойного подтверждения и повторной проверки готовности. Возвращаемый REQUESTED не означает завершённое антивирусное сканирование.
