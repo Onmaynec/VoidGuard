@@ -65,8 +65,15 @@ try {
         throw "Однофайловое сканирование обработало неверное число файлов: $($result.FilesScanned)."
     }
     if ($null -eq $result.Findings) { throw 'Поле Findings отсутствует.' }
+    if ([int]$result.FilesDiscovered -ne 1 -or [int]$result.FilesFailed -ne 0 -or [int]$result.FilesSkipped -ne 0 -or -not $result.Complete) {
+        throw 'Счётчики однофайлового сканирования или статус завершения неверны.'
+    }
 } finally {
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host '[OK] Слой стабильности, совместимые сканеры и защищённый цикл меню проверены.' -ForegroundColor Green
+$stabilitySource = Get-Content -LiteralPath (Join-Path $root 'Modules\VoidGuard.Stability.psm1') -Raw -Encoding UTF8
+if ($stabilitySource -match 'Set-Item\s+-Path\s+Function:|\[scriptblock\]::Create') {
+    throw 'Stability не должен подменять функции других модулей во время выполнения.'
+}
+Write-Host '[OK] Сканеры и защищённый цикл меню работают без runtime-подмен.' -ForegroundColor Green

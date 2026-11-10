@@ -52,7 +52,7 @@ function Get-VoidGuardSecurityStatus {
             foreach ($value in @($preference.ExclusionPath)) { if ($value) { $exclusions.Add("Path: $value") } }
             foreach ($value in @($preference.ExclusionProcess)) { if ($value) { $exclusions.Add("Process: $value") } }
             foreach ($value in @($preference.ExclusionExtension)) { if ($value) { $exclusions.Add("Extension: $value") } }
-            $result.DefenderExclusions = @($exclusions)
+            $result.DefenderExclusions = $exclusions.ToArray()
         } catch { }
     }
 
@@ -128,7 +128,7 @@ function Get-VoidGuardStartupEntries {
             })
         }
     }
-    return @($entries)
+    return $entries.ToArray()
 }
 
 function Get-VoidGuardProcessFindings {
@@ -191,7 +191,7 @@ function Get-VoidGuardProcessFindings {
             }
         } catch { }
     }
-    return @($findings | Sort-Object Score -Descending)
+    return @($findings.ToArray() | Sort-Object Score -Descending)
 }
 
 Export-ModuleMember -Function @(

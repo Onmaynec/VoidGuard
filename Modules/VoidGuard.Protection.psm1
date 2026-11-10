@@ -43,6 +43,25 @@ function Get-VoidGuardCanonicalPath {
     return $item.FullName
 }
 
+function Get-VoidGuardPathReparseAncestor {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Path)
+
+    $current = [IO.Path]::GetFullPath($Path)
+    while (-not [string]::IsNullOrWhiteSpace($current)) {
+        $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+        if ($null -ne $item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            return $current
+        }
+        $parent = [IO.Path]::GetDirectoryName($current)
+        if ([string]::IsNullOrWhiteSpace($parent) -or [string]::Equals($parent, $current, [StringComparison]::OrdinalIgnoreCase)) {
+            break
+        }
+        $current = $parent
+    }
+    return $null
+}
+
 function Test-VoidGuardWmiProtectedFile {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Path)
@@ -120,8 +139,9 @@ function Test-VoidGuardProtectedTarget {
         $reasons.Add('Directory quarantine is disabled in v0.1.0. Select an individual file.')
     }
 
-    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-        $reasons.Add('Reparse points and symbolic links are blocked to prevent path redirection.')
+    $reparseAncestor = Get-VoidGuardPathReparseAncestor -Path $canonical
+    if ($reparseAncestor) {
+        $reasons.Add("Reparse point in target path: $reparseAncestor")
     }
 
     $comparison = [StringComparison]::OrdinalIgnoreCase
@@ -217,6 +237,7 @@ function Get-VoidGuardLockingProcesses {
 Export-ModuleMember -Function @(
     'Test-VoidGuardWindows',
     'Get-VoidGuardCanonicalPath',
+    'Get-VoidGuardPathReparseAncestor',
     'Test-VoidGuardWmiProtectedFile',
     'Get-VoidGuardSignatureInfo',
     'Test-VoidGuardProtectedTarget',

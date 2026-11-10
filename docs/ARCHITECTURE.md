@@ -1,4 +1,4 @@
-# Архитектура VoidGuard v0.3.0
+# Архитектура VoidGuard v0.3.4
 
 ```text
 VoidGuard.ps1
@@ -11,7 +11,9 @@ VoidGuard.ps1
  ├── VoidGuard.Remediation  — Restart Manager, process stop, delete-on-reboot
  ├── VoidGuard.Quarantine   — безопасное перемещение и восстановление
  ├── VoidGuard.Reporting    — offline HTML/JSON serialization
- └── VoidGuard.UI           — TUI и управление клавиатурой
+ ├── VoidGuard.UI           — TUI и управление клавиатурой
+ ├── VoidGuard.ConsoleFix   — центрирование и форматирование вывода
+ └── VoidGuard.Stability    — диагностика и самопроверка без runtime-подмен
 ```
 
 ## Главный trust boundary
@@ -35,6 +37,10 @@ Exact-process validation or delete-on-reboot
                  ↓
 Quarantine / pending ledger / post-reboot verification
 ```
+
+## Неполные результаты сканирования
+
+Scanner учитывает кандидатов, успешно обработанные и пропущенные файлы, ошибки обработки и ошибки перечисления. При ошибках, отсутствии проверенных объектов или достижении установленного лимита `Complete` становится `false`, а `ScanStatus` — `PARTIAL`. Нулевое число находок при таком статусе не доказывает отсутствие угроз.
 
 ## Rule engine
 
@@ -80,6 +86,10 @@ Quarantine / pending ledger / post-reboot verification
 - HTML-экранирует пути, причины и другие данные;
 - не вставляет JavaScript, внешние стили, шрифты или analytics;
 - может работать в полностью отключённой от сети среде.
+
+## Карантин и Pending Ledger
+
+Восстановление из карантина заново проверяет SHA-256, размер, ID, metadata schema и конечный путь, включая родительские reparse points. Pending Ledger связывает проверку удаления с фактом перезагрузки Windows. Отсутствие файла до новой загрузки не означает выполнение операции `MoveFileEx`.
 
 ## Остановка процесса
 

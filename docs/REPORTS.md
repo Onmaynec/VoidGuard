@@ -48,6 +48,10 @@ HTML report содержит:
 - YARA matches;
 - объяснимые Reasons.
 
+## Полнота результатов
+
+Для сканирований v0.3.4 JSON содержит `ScanStatus`, `Complete`, `FilesDiscovered`, `FilesScanned`, `FilesSkipped`, `FilesFailed`, `FileErrors`, `EnumerationErrors` и `ScanLimitReached`. При `PARTIAL` список findings отражает только успешно обработанные файлы. Для автоматизации следует использовать машинные поля JSON.
+
 ## Privacy и безопасность
 
 HTML report:

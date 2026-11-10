@@ -81,6 +81,57 @@ public static class VoidGuardRemediationNative
     }
 }
 
+function Get-VoidGuardLastBootTimeUtc {
+    [CmdletBinding()]
+    param()
+
+    if (-not (Test-VoidGuardWindows)) { return $null }
+    try {
+        $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop | Select-Object -First 1
+        if ($os -and $os.LastBootUpTime) {
+            return ([datetime]$os.LastBootUpTime).ToUniversalTime()
+        }
+    } catch {
+        try {
+            $os = Get-WmiObject -Class Win32_OperatingSystem -ErrorAction Stop | Select-Object -First 1
+            if ($os -and $os.LastBootUpTime) {
+                return [Management.ManagementDateTimeConverter]::ToDateTime([string]$os.LastBootUpTime).ToUniversalTime()
+            }
+        } catch { }
+    }
+    return $null
+}
+
+function Get-VoidGuardPendingRecordState {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Record,
+        $CurrentBootUtc,
+        [bool]$FileExists = $false,
+        [string]$CurrentHash,
+        [string]$HashError
+    )
+
+    if ($null -eq $CurrentBootUtc) {
+        return [pscustomobject]@{ Status = 'VERIFICATION_UNAVAILABLE'; Reason = 'Не удалось установить время последней загрузки Windows.' }
+    }
+    $scheduled = ([datetime]$Record.ScheduledUtc).ToUniversalTime()
+    $boot = ([datetime]$CurrentBootUtc).ToUniversalTime()
+    if ($boot -le $scheduled) {
+        return [pscustomobject]@{ Status = 'AWAITING_REBOOT'; Reason = 'После назначения операции Windows ещё не перезагружалась.' }
+    }
+    if (-not $FileExists) {
+        return [pscustomobject]@{ Status = 'REMOVED_VERIFIED'; Reason = 'После подтверждённой перезагрузки файл отсутствует.' }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($HashError) -or [string]::IsNullOrWhiteSpace($CurrentHash)) {
+        return [pscustomobject]@{ Status = 'VERIFICATION_INCOMPLETE'; Reason = "Не удалось вычислить хеш: $HashError" }
+    }
+    if (-not [string]::Equals([string]$Record.SHA256, $CurrentHash, [StringComparison]::OrdinalIgnoreCase)) {
+        return [pscustomobject]@{ Status = 'REPLACED_OR_RECREATED'; Reason = 'Файл существует, но SHA-256 изменился.' }
+    }
+    return [pscustomobject]@{ Status = 'STILL_PRESENT'; Reason = 'После перезагрузки исходный файл остаётся на месте.' }
+}
+
 function Get-VoidGuardPendingRoot {
     [CmdletBinding()]
     param()
@@ -241,12 +292,13 @@ function Register-VoidGuardDeleteOnReboot {
     $hash = (Get-FileHash -LiteralPath $canonical -Algorithm SHA256 -ErrorAction Stop).Hash
     $id = 'P-{0}-{1}' -f (Get-Date -Format 'yyyyMMddHHmmss'), ([Guid]::NewGuid().ToString('N').Substring(0, 8).ToUpperInvariant())
 
-    if ($PSCmdlet.ShouldProcess($canonical, 'Schedule file deletion during the next Windows boot')) {
-        $ok = [VoidGuardRemediationNative]::MoveFileEx($canonical, $null, [VoidGuardRemediationNative]::MOVEFILE_DELAY_UNTIL_REBOOT)
-        if (-not $ok) {
-            $win32 = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
-            return [pscustomobject]@{ Success = $false; Status = 'SCHEDULE_FAILED'; Path = $canonical; Win32Error = $win32 }
-        }
+    if (-not $PSCmdlet.ShouldProcess($canonical, 'Schedule file deletion during the next Windows boot')) {
+        return [pscustomobject]@{ Success = $false; Status = 'DRY_RUN'; Path = $canonical }
+    }
+    $ok = [VoidGuardRemediationNative]::MoveFileEx($canonical, $null, [VoidGuardRemediationNative]::MOVEFILE_DELAY_UNTIL_REBOOT)
+    if (-not $ok) {
+        $win32 = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        return [pscustomobject]@{ Success = $false; Status = 'SCHEDULE_FAILED'; Path = $canonical; Win32Error = $win32 }
     }
 
     $record = [ordered]@{
@@ -257,6 +309,9 @@ function Register-VoidGuardDeleteOnReboot {
         CurrentSHA256  = $null
         HashMatches    = $null
         ScheduledUtc   = (Get-Date).ToUniversalTime()
+        BootTimeAtScheduleUtc = Get-VoidGuardLastBootTimeUtc
+        VerifiedBootUtc = $null
+        VerificationReason = $null
         Status         = 'PENDING_REBOOT'
         VerifiedUtc    = $null
         PolicyWarnings = @($policy.Warnings)
@@ -271,36 +326,46 @@ function Get-VoidGuardPendingRemediations {
     [CmdletBinding()]
     param([switch]$Verify)
 
-    $records = New-Object System.Collections.Generic.List[object]
+    $records = New-Object 'System.Collections.Generic.List[object]'
+    $boot = if ($Verify) { Get-VoidGuardLastBootTimeUtc } else { $null }
     foreach ($file in Get-ChildItem -LiteralPath (Get-VoidGuardPendingRoot) -Filter '*.json' -File -ErrorAction SilentlyContinue) {
         try {
-            $record = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+            $record = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
             if ($Verify) {
-                $exists = Test-Path -LiteralPath ([string]$record.Path)
+                $exists = $false
                 $currentHash = $null
-                $hashMatches = $null
-                if ($exists) {
-                    try {
-                        $currentHash = (Get-FileHash -LiteralPath ([string]$record.Path) -Algorithm SHA256 -ErrorAction Stop).Hash
-                        $hashMatches = [string]::Equals([string]$record.SHA256, $currentHash, [StringComparison]::OrdinalIgnoreCase)
-                    } catch { }
+                $hashError = $null
+                if ($null -ne $boot -and ([datetime]$boot).ToUniversalTime() -gt ([datetime]$record.ScheduledUtc).ToUniversalTime()) {
+                    $exists = Test-Path -LiteralPath ([string]$record.Path) -PathType Leaf
+                    if ($exists) {
+                        try {
+                            $currentHash = (Get-FileHash -LiteralPath ([string]$record.Path) -Algorithm SHA256 -ErrorAction Stop).Hash
+                        } catch {
+                            $hashError = $_.Exception.Message
+                        }
+                    }
                 }
-                $record.Status = if (-not $exists) {
-                    'REMOVED_VERIFIED'
-                } elseif ($hashMatches -eq $false) {
-                    'REPLACED_OR_RECREATED'
-                } else {
-                    'STILL_PRESENT'
-                }
+                $decision = Get-VoidGuardPendingRecordState -Record $record -CurrentBootUtc $boot -FileExists:$exists -CurrentHash $currentHash -HashError $hashError
+                $record.Status = $decision.Status
                 $record.CurrentSHA256 = $currentHash
-                $record.HashMatches = $hashMatches
+                $record.HashMatches = if ($currentHash) { [string]::Equals([string]$record.SHA256, $currentHash, [StringComparison]::OrdinalIgnoreCase) } else { $null }
                 $record.VerifiedUtc = (Get-Date).ToUniversalTime()
-                $record | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $file.FullName -Encoding UTF8
+                # Совместимость со старыми ledger: поля могли отсутствовать в схеме v0.3.
+                $record | Add-Member -NotePropertyName VerifiedBootUtc -NotePropertyValue $boot -Force
+                $record | Add-Member -NotePropertyName VerificationReason -NotePropertyValue $decision.Reason -Force
+                $record | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $file.FullName -Encoding UTF8 -ErrorAction Stop
             }
             $records.Add($record)
-        } catch { }
+        } catch {
+            $records.Add([pscustomobject]@{
+                Id = $file.BaseName
+                Status = 'LEDGER_READ_ERROR'
+                Path = $file.FullName
+                VerificationReason = $_.Exception.Message
+            })
+        }
     }
-    return @($records | Sort-Object ScheduledUtc -Descending)
+    return @($records.ToArray() | Sort-Object ScheduledUtc -Descending)
 }
 
 Export-ModuleMember -Function @(
@@ -308,5 +373,6 @@ Export-ModuleMember -Function @(
     'Test-VoidGuardProcessSafeToStop',
     'Stop-VoidGuardTargetProcess',
     'Register-VoidGuardDeleteOnReboot',
-    'Get-VoidGuardPendingRemediations'
+    'Get-VoidGuardPendingRemediations',
+    'Get-VoidGuardPendingRecordState'
 )

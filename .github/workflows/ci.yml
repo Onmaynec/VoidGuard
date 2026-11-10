@@ -40,6 +40,38 @@ jobs:
         shell: powershell
         run: ./Tests/Stability.Tests.ps1
 
+      - name: Run PowerShell 7 rule-pack trust tests
+        shell: pwsh
+        run: ./Tests/RulePackTrust.Tests.ps1
+
+      - name: Run Windows PowerShell 5.1 rule-pack trust tests
+        shell: powershell
+        run: ./Tests/RulePackTrust.Tests.ps1
+
+      - name: Run PowerShell 7 scanner diagnostics tests
+        shell: pwsh
+        run: ./Tests/ScannerDiagnostics.Tests.ps1
+
+      - name: Run Windows PowerShell 5.1 scanner diagnostics tests
+        shell: powershell
+        run: ./Tests/ScannerDiagnostics.Tests.ps1
+
+      - name: Run PowerShell 7 quarantine integrity tests
+        shell: pwsh
+        run: ./Tests/QuarantineIntegrity.Tests.ps1
+
+      - name: Run Windows PowerShell 5.1 quarantine integrity tests
+        shell: powershell
+        run: ./Tests/QuarantineIntegrity.Tests.ps1
+
+      - name: Run PowerShell 7 pending ledger tests
+        shell: pwsh
+        run: ./Tests/PendingLedger.Tests.ps1
+
+      - name: Run Windows PowerShell 5.1 pending ledger tests
+        shell: powershell
+        run: ./Tests/PendingLedger.Tests.ps1
+
       - name: Run Windows PowerShell 5.1 full mode regression tests
         shell: powershell
         run: ./Tests/FullRegression.Tests.ps1

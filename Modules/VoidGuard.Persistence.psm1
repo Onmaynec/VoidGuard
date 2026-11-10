@@ -132,7 +132,7 @@ function Get-VoidGuardServicePersistence {
         }
     } catch {
     }
-    return @($items)
+    return $items.ToArray()
 }
 
 function Get-VoidGuardScheduledTaskPersistence {
@@ -154,7 +154,7 @@ function Get-VoidGuardScheduledTaskPersistence {
         }
     } catch {
     }
-    return @($items)
+    return $items.ToArray()
 }
 
 function Get-VoidGuardWmiPersistence {
@@ -184,7 +184,7 @@ function Get-VoidGuardWmiPersistence {
         }
     } catch {
     }
-    return @($items)
+    return $items.ToArray()
 }
 
 function Get-VoidGuardPersistenceFindings {
@@ -200,7 +200,7 @@ function Get-VoidGuardPersistenceFindings {
     foreach ($item in Get-VoidGuardScheduledTaskPersistence -Context $Context) { $findings.Add($item) }
     foreach ($item in Get-VoidGuardWmiPersistence -Context $Context) { $findings.Add($item) }
 
-    return @($findings | Sort-Object Score -Descending)
+    return @($findings.ToArray() | Sort-Object Score -Descending)
 }
 
 Export-ModuleMember -Function @(
