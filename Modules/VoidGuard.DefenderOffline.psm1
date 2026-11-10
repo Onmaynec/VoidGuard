@@ -14,7 +14,14 @@ function Get-VGDefenderOfflineReadiness {
     else {
         $admin=[bool](Test-VoidGuardAdministrator)
         if (-not $admin) { $blocks.Add('Administrator rights are required.') }
+        if ([Environment]::OSVersion.Version.Major -lt 10) { $blocks.Add('Windows 10 or newer is required.') }
         if ($env:PROCESSOR_ARCHITECTURE -match '^ARM') { $blocks.Add('Windows on ARM is not supported by Defender Offline.') }
+        try {
+            $cpu = Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | Select-Object -First 1
+            if ([int]$cpu.Architecture -in @(5,12)) { $blocks.Add('ARM hardware is unsupported by Microsoft Defender Offline.') }
+        } catch {
+            $blocks.Add('Cannot verify CPU architecture.')
+        }
         try {
             $os=Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
             if ([int]$os.ProductType -ne 1) { $blocks.Add('Windows Server is not supported by Defender Offline.') }
@@ -25,7 +32,7 @@ function Get-VGDefenderOfflineReadiness {
         }
         try {
             $status=Get-MpComputerStatus -ErrorAction Stop
-            $defender=if ($status.AntivirusEnabled -and ([string]$status.AMRunningMode -ne 'Passive Mode')) { 'ACTIVE' } else { 'INACTIVE' }
+            $defender=if ($status.AntivirusEnabled -and ([string]$status.AMRunningMode -eq 'Normal')) { 'ACTIVE' } else { 'INACTIVE' }
             if ($defender -ne 'ACTIVE') { $blocks.Add('Microsoft Defender Antivirus must be active.') }
         } catch { $blocks.Add('Cannot verify Microsoft Defender Antivirus status.') }
 

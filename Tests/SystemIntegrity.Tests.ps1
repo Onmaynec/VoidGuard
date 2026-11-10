@@ -56,5 +56,15 @@ try {
     $preview=Invoke-VGDefenderOffline
     if ($preview.Status -notin @('BLOCKED','CONFIRMATION_REQUIRED')) { throw 'Readiness preview caused an unexpected action.' }
 
-    Write-Host '[OK] System Integrity: snapshots, drift, partial, schema, and safe Defender preview.' -ForegroundColor Green
+    $observed=Get-VGIntegritySnapshot -Sections @('Security','Services','Tasks','Startup') -IncludeHosts:$false
+    Assert-VGIntegritySnapshot -Snapshot $observed
+    foreach ($sectionName in @('Security','Services','Tasks','Startup')) {
+        if (-not $observed.Sections.PSObject.Properties[$sectionName]) {
+            throw "Live Windows inventory missing section: $sectionName"
+        }
+    }
+    if (@($observed.Sections.Services.Records).Count -eq 0 -and $observed.Sections.Services.State -eq 'COMPLETE') {
+        throw 'Service inventory is empty but falsely marked complete.'
+    }
+    Write-Host '[OK] System Integrity: snapshots, drift, partial, live Windows inventory and safe Defender preview.' -ForegroundColor Green
 } finally { Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue }
