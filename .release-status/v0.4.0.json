@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "tag": "v0.4.0",
+  "name": "VOIDGUARD v0.4.0 — SYSTEM INTEGRITY",
+  "url": "https://github.com/Onmaynec/VoidGuard/releases/tag/v0.4.0",
+  "draft": false,
+  "prerelease": false,
+  "publishedAt": "2026-11-10T08:53:53Z",
+  "verifiedAtUtc": "2026-11-10T08:53:54.7249246Z",
+  "requiredAssets": [
+    "VoidGuard-v0.4.0-Portable.zip",
+    "VoidGuard-v0.4.0-Source.zip",
+    "SHA256SUMS.txt"
+  ],
+  "assets": [
+    {
+      "name": "SHA256SUMS.txt",
+      "size": 192,
+      "digest": "sha256:728bce902b713f41c6dc752e0a736eaf38f816dd5f12cacd11055aa8b9d34b9d",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.4.0/SHA256SUMS.txt"
+    },
+    {
+      "name": "VoidGuard-v0.4.0-Portable.zip",
+      "size": 85440,
+      "digest": "sha256:a50f819370fee059810950e7b355279fea31b5ae62851bbe949cd78448214313",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.4.0/VoidGuard-v0.4.0-Portable.zip"
+    },
+    {
+      "name": "VoidGuard-v0.4.0-Source.zip",
+      "size": 115100,
+      "digest": "sha256:0d5ad2bb0d40c2603cd6cf082d81876765e50ff285c207d05f9922ab2fde929f",
+      "url": "https://github.com/Onmaynec/VoidGuard/releases/download/v0.4.0/VoidGuard-v0.4.0-Source.zip"
+    }
+  ]
+}
